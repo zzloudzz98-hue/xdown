@@ -21,15 +21,22 @@
   .ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
   .hint { font-size:13px; color:var(--sub); margin-top:8px; }
   #msg { margin-top:10px; font-size:14px; color:var(--sub); min-height:1em; }
-  #list { list-style:none; margin:0; padding:0; }
-  #list li { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px 8px; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px; }
-  .bar { flex-basis:100%; height:6px; background:var(--line); border-radius:3px; overflow:hidden; }
+  #list, #hist { list-style:none; margin:0; padding:0; }
+  #list li, #hist li { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .thumb { width:64px; height:64px; flex-shrink:0; border-radius:8px; object-fit:cover; background:var(--line); }
+  .info { flex:1; min-width:0; }
+  .top { display:flex; justify-content:space-between; gap:8px; }
+  .bar { margin-top:8px; height:6px; background:var(--line); border-radius:3px; overflow:hidden; }
   .bar i { display:block; height:100%; width:0; background:var(--accent); transition:width .2s; }
-  #list li:last-child { border-bottom:0; }
+  #list li:last-child, #hist li:last-child { border-bottom:0; }
   .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .st { flex-shrink:0; color:var(--sub); }
   .st.ok { color:var(--ok); } .st.bad { color:var(--bad); }
   .st a { color:var(--accent); }
+  .hist-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .hist-head h2 { font-size:16px; margin:0; }
+  .hist-head button { width:auto; margin:0; padding:6px 10px; font-size:13px; background:transparent; color:var(--sub); border:1px solid var(--line); }
+  #hist .st a { font-size:13px; }
   #summary { font-size:14px; color:var(--sub); margin-bottom:6px; }
 </style>
 </head>
@@ -47,6 +54,10 @@
     <div id="summary"></div>
     <ul id="list"></ul>
   </div>
+  <div class="card" id="histCard" hidden>
+    <div class="hist-head"><h2>받은 내역</h2><button id="clearBtn">내역 지우기</button></div>
+    <ul id="hist" class="list"></ul>
+  </div>
 </main>
 <script>
 const $ = id => document.getElementById(id);
@@ -62,6 +73,19 @@ function parseAll(text) {
   return out;
 }
 
+// 저장 파일 이름: X 글 내용(앞 40자) + 받는 날짜. 예) 고양이가 점프함_2026-10-09.mp4
+function fileBase(tweet, t) {
+  let title = ((tweet && tweet.text) || '')
+    .replace(/https?:\/\/\S+/g, '')          // 링크 빼기
+    .replace(/[\\/:*?"<>|#%]+/g, ' ')  // 파일 이름에 못 쓰는 글자 빼기
+    .replace(/\s+/g, ' ').trim();
+  if (!title) title = `@${t.user}`;
+  title = Array.from(title).slice(0, 40).join('').trim();
+  const d = new Date();
+  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${title}_${day}`;
+}
+
 // mp4 중 화질 가장 좋은 것 고르기
 function bestMp4(v) {
   const list = (v.variants || []).filter(x => (x.content_type || '').includes('mp4') || /\.mp4/.test(x.url));
@@ -72,7 +96,7 @@ function bestMp4(v) {
 function addRow(label) {
   $('queueCard').hidden = false;
   const li = document.createElement('li');
-  li.innerHTML = `<span class="name"></span><span class="st">대기</span><div class="bar"><i></i></div>`;
+  li.innerHTML = `<img class="thumb" alt=""><div class="info"><div class="top"><span class="name"></span><span class="st">대기</span></div><div class="bar"><i></i></div></div>`;
   li.querySelector('.name').textContent = label;
   $('list').appendChild(li);
   return li.querySelector('.st');
@@ -81,7 +105,7 @@ function addRow(label) {
 function summary() {
   const done = queue.filter(q => q.state === 'ok').length;
   const bad = queue.filter(q => q.state === 'bad').length;
-  const left = queue.filter(q => q.state === 'wait' || q.state === 'run').length;
+  const left = queue.filter(q => q.state === 'find' || q.state === 'wait' || q.state === 'run').length;
   $('summary').textContent = `완료 ${done} · 남음 ${left}` + (bad ? ` · 실패 ${bad}` : '');
 }
 
@@ -107,7 +131,7 @@ async function run() {
   running = true;
   for (let i = 0; i < queue.length; i++) {
     const q = queue[i];
-    if (q.state === 'find') await expand(q, i);
+    if (q.state === 'find') { await expand(q, i); summary(); }
     if (q.state === 'wait') { q.state = 'run'; summary(); await download(q); summary(); }
   }
   running = false;
@@ -118,21 +142,26 @@ async function run() {
 async function expand(q, i) {
   const { t, st } = q;
   const fx = `https://d.fixupx.com/${t.user}/status/${t.id}`;
+  st.closest("li").querySelector('.name').textContent = `@${t.user}`;
   try {
     const d = await (await fetch(`https://api.fxtwitter.com/status/${t.id}`)).json();
     const vids = (d.tweet && d.tweet.media && d.tweet.media.videos) || [];
     if (!vids.length) { q.state = 'bad'; st.className = 'st bad'; st.innerHTML = `영상 없음 <a href="${fx}" target="_blank">열기</a>`; return; }
-    const name = st.parentNode.querySelector('.name');
+    const name = st.closest("li").querySelector('.name');
     name.textContent = `@${t.user}` + (vids.length > 1 ? ` · 영상 1/${vids.length}` : '');
-    q.url = bestMp4(vids[0]); q.file = vids.length > 1 ? `x_${t.id}_1.mp4` : `x_${t.id}.mp4`; q.fx = fx; q.state = 'wait';
+    if (vids[0].thumbnail_url) st.closest("li").querySelector('.thumb').src = vids[0].thumbnail_url;
+    q.thumb = vids[0].thumbnail_url;
+    q.url = bestMp4(vids[0]); const base = fileBase(d.tweet, t);
+    q.file = vids.length > 1 ? `${base}_1.mp4` : `${base}.mp4`; q.fx = fx; q.state = 'wait';
     // 2번째 영상부터 바로 아래 줄에 차례로 끼워 넣기
-    let after = st.parentNode;
+    let after = st.closest("li");
     const extra = vids.slice(1).map((v, k) => {
       const li = document.createElement('li');
-      li.innerHTML = `<span class="name"></span><span class="st">대기</span><div class="bar"><i></i></div>`;
+      li.innerHTML = `<img class="thumb" alt=""><div class="info"><div class="top"><span class="name"></span><span class="st">대기</span></div><div class="bar"><i></i></div></div>`;
       li.querySelector('.name').textContent = `@${t.user} · 영상 ${k + 2}/${vids.length}`;
+      if (v.thumbnail_url) li.querySelector('.thumb').src = v.thumbnail_url;
       after.after(li); after = li;
-      return { t, st: li.querySelector('.st'), url: bestMp4(v), file: `x_${t.id}_${k + 2}.mp4`, fx, state: 'wait' };
+      return { t, st: li.querySelector('.st'), thumb: v.thumbnail_url, url: bestMp4(v), file: `${base}_${k + 2}.mp4`, fx, state: 'wait' };
     });
     queue.splice(i + 1, 0, ...extra);
   } catch {
@@ -145,7 +174,7 @@ async function download(q) {
   try {
     const res = await fetch(q.url, { referrerPolicy: 'no-referrer' });
     if (!res.ok) throw new Error(res.status);
-    const bar = st.parentNode.querySelector(".bar i");
+    const bar = st.closest("li").querySelector(".bar i");
     const total = +res.headers.get('content-length') || 0;
     const reader = res.body.getReader();
     const chunks = []; let got = 0;
@@ -165,13 +194,45 @@ async function download(q) {
     setTimeout(() => URL.revokeObjectURL(a.href), 60000);
     bar.style.width = '100%'; bar.style.background = 'var(--ok)';
     q.state = 'ok'; st.className = 'st ok'; st.textContent = '✅ 저장';
+    saveHistory(q);
     await new Promise(r => setTimeout(r, 800)); // 저장 사이 잠깐 쉬기
   } catch {
     q.state = 'bad'; st.className = 'st bad';
-    const b = st.parentNode.querySelector('.bar i'); b.style.width = '100%'; b.style.background = 'var(--bad)';
+    const b = st.closest("li").querySelector('.bar i'); b.style.width = '100%'; b.style.background = 'var(--bad)';
     st.innerHTML = `실패 <a href="${q.url}" target="_blank">직접 열기</a>`;
   }
 }
+
+// 받은 내역: 이 폰의 브라우저에만 저장 (최근 100개)
+const HKEY = 'xdown_history';
+function loadHistory() { try { return JSON.parse(localStorage.getItem(HKEY)) || []; } catch { return []; } }
+function saveHistory(q) {
+  const h = loadHistory();
+  h.unshift({ user: q.t.user, file: q.file, thumb: q.thumb || '', fx: q.fx, at: Date.now() });
+  try { localStorage.setItem(HKEY, JSON.stringify(h.slice(0, 100))); } catch {}
+  renderHistory();
+}
+function renderHistory() {
+  const h = loadHistory();
+  $('histCard').hidden = !h.length;
+  $('hist').innerHTML = '';
+  h.forEach(x => {
+    const li = document.createElement('li');
+    const d = new Date(x.at);
+    li.innerHTML = `<img class="thumb" alt=""><div class="info"><div class="top"><span class="name"></span><span class="st"><a target="_blank">원본</a></span></div><div class="hint"></div></div>`;
+    if (x.thumb) li.querySelector('.thumb').src = x.thumb;
+    li.querySelector('.name').textContent = `@${x.user}`;
+    li.querySelector('a').href = x.fx;
+    li.querySelector('.hint').textContent = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} · ${x.file}`;
+    $('hist').appendChild(li);
+  });
+}
+$('clearBtn').onclick = () => {
+  if (!confirm('받은 내역을 지울까요? (받은 영상 파일은 그대로 남아요)')) return;
+  try { localStorage.removeItem(HKEY); } catch {}
+  renderHistory();
+};
+renderHistory();
 
 $('goBtn').onclick = add;
 $('pasteBtn').onclick = async () => {
