@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>X 영상 받기</title>
 <style>
-  :root { --bg:#f5f5f7; --card:#fff; --text:#111; --sub:#666; --line:#ddd; --accent:#1d9bf0; }
+  :root { --bg:#f5f5f7; --card:#fff; --text:#111; --sub:#666; --line:#ddd; --accent:#1d9bf0; --ok:#00ba7c; --bad:#f4212e; }
   @media (prefers-color-scheme: dark) {
     :root { --bg:#000; --card:#16181c; --text:#e7e9ea; --sub:#8b98a5; --line:#2f3336; }
   }
@@ -14,36 +14,52 @@
   body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif; }
   main { max-width:480px; margin:0 auto; padding:24px 16px; }
   h1 { font-size:22px; margin:0 0 16px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:12px; }
   textarea { width:100%; min-height:72px; font-size:16px; padding:12px; border-radius:12px; border:1px solid var(--line); background:transparent; color:var(--text); resize:vertical; }
   button { width:100%; font-size:17px; font-weight:600; padding:14px; border:0; border-radius:12px; margin-top:10px; cursor:pointer; }
   .primary { background:var(--accent); color:#fff; }
   .ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
-  #status { margin-top:14px; font-size:15px; color:var(--sub); white-space:pre-line; }
-  #link { word-break:break-all; color:var(--accent); font-size:14px; }
-  video { width:100%; border-radius:12px; margin-top:12px; background:#000; }
-  .videos button { background:#00ba7c; color:#fff; }
+  .hint { font-size:13px; color:var(--sub); margin-top:8px; }
+  #msg { margin-top:10px; font-size:14px; color:var(--sub); min-height:1em; }
+  #list { list-style:none; margin:0; padding:0; }
+  #list li { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px 8px; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .bar { flex-basis:100%; height:6px; background:var(--line); border-radius:3px; overflow:hidden; }
+  .bar i { display:block; height:100%; width:0; background:var(--accent); transition:width .2s; }
+  #list li:last-child { border-bottom:0; }
+  .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .st { flex-shrink:0; color:var(--sub); }
+  .st.ok { color:var(--ok); } .st.bad { color:var(--bad); }
+  .st a { color:var(--accent); }
+  #summary { font-size:14px; color:var(--sub); margin-bottom:6px; }
 </style>
 </head>
 <body>
 <main>
   <h1>X 영상 받기</h1>
   <div class="card">
-    <textarea id="input" placeholder="x.com 링크를 붙여넣으세요"></textarea>
+    <textarea id="input" placeholder="x.com 링크를 붙여넣으세요 (여러 개면 줄을 바꿔서)"></textarea>
     <button class="ghost" id="pasteBtn">📋 붙여넣기</button>
-    <button class="primary" id="goBtn">⬇️ 다운로드</button>
-    <div id="status"></div>
-    <div class="videos" id="videos"></div>
+    <button class="primary" id="goBtn">⬇️ 다운로드 목록에 추가</button>
+    <div class="hint">받는 중에도 다음 링크를 계속 붙여넣으세요. 순서대로 하나씩 받아요.</div>
+    <div id="msg"></div>
+  </div>
+  <div class="card" id="queueCard" hidden>
+    <div id="summary"></div>
+    <ul id="list"></ul>
   </div>
 </main>
 <script>
 const $ = id => document.getElementById(id);
-const status = msg => $('status').innerHTML = msg;
+const queue = [];      // 받을 영상 목록
+const seen = new Set(); // 이미 넣은 글 번호 (같은 링크 두 번 방지)
+let running = false;
 
-// x.com / twitter.com 링크에서 글 번호(status id) 뽑기
-function parse(text) {
-  const m = text.match(/(?:x|twitter|fixupx|fxtwitter|vxtwitter)\.com\/([^\/\s?]+)\/status\/(\d+)/i);
-  return m ? { user: m[1], id: m[2] } : null;
+// 붙여넣은 글에서 x.com 링크를 모두 찾기
+function parseAll(text) {
+  const re = /(?:x|twitter|fixupx|fxtwitter|vxtwitter)\.com\/([^\/\s?]+)\/status\/(\d+)/gi;
+  const out = []; let m;
+  while ((m = re.exec(text))) out.push({ user: m[1], id: m[2] });
+  return out;
 }
 
 // mp4 중 화질 가장 좋은 것 고르기
@@ -53,10 +69,83 @@ function bestMp4(v) {
   return v.url;
 }
 
-async function download(url, name) {
+function addRow(label) {
+  $('queueCard').hidden = false;
+  const li = document.createElement('li');
+  li.innerHTML = `<span class="name"></span><span class="st">대기</span><div class="bar"><i></i></div>`;
+  li.querySelector('.name').textContent = label;
+  $('list').appendChild(li);
+  return li.querySelector('.st');
+}
+
+function summary() {
+  const done = queue.filter(q => q.state === 'ok').length;
+  const bad = queue.filter(q => q.state === 'bad').length;
+  const left = queue.filter(q => q.state === 'wait' || q.state === 'run').length;
+  $('summary').textContent = `완료 ${done} · 남음 ${left}` + (bad ? ` · 실패 ${bad}` : '');
+}
+
+async function add() {
+  const items = parseAll($('input').value);
+  $('input').value = '';
+  if (!items.length) { $('msg').textContent = 'x.com 링크를 못 찾았어요. 다시 확인해 주세요.'; return; }
+  let added = 0;
+  for (const t of items) {
+    if (seen.has(t.id)) continue;
+    seen.add(t.id); added++;
+    const st = addRow(`@${t.user} · 영상 찾는 중…`);
+    queue.push({ t, st, state: 'find' });
+  }
+  $('msg').textContent = added ? `${added}개 추가했어요.` : '이미 목록에 있는 링크예요.';
+  summary();
+  run();
+}
+
+// 하나씩 순서대로 처리 (동시에 받으면 폰에서 막히거나 메모리가 부족해질 수 있음)
+async function run() {
+  if (running) return;
+  running = true;
+  for (let i = 0; i < queue.length; i++) {
+    const q = queue[i];
+    if (q.state === 'find') await expand(q, i);
+    if (q.state === 'wait') { q.state = 'run'; summary(); await download(q); summary(); }
+  }
+  running = false;
+  if (queue.some(q => q.state === 'find' || q.state === 'wait')) run();
+}
+
+// 글 하나에 영상이 여러 개면 각각 목록에 펼치기
+async function expand(q, i) {
+  const { t, st } = q;
+  const fx = `https://d.fixupx.com/${t.user}/status/${t.id}`;
   try {
-    const res = await fetch(url, { referrerPolicy: "no-referrer" });
+    const d = await (await fetch(`https://api.fxtwitter.com/status/${t.id}`)).json();
+    const vids = (d.tweet && d.tweet.media && d.tweet.media.videos) || [];
+    if (!vids.length) { q.state = 'bad'; st.className = 'st bad'; st.innerHTML = `영상 없음 <a href="${fx}" target="_blank">열기</a>`; return; }
+    const name = st.parentNode.querySelector('.name');
+    name.textContent = `@${t.user}` + (vids.length > 1 ? ` · 영상 1/${vids.length}` : '');
+    q.url = bestMp4(vids[0]); q.file = vids.length > 1 ? `x_${t.id}_1.mp4` : `x_${t.id}.mp4`; q.fx = fx; q.state = 'wait';
+    // 2번째 영상부터 바로 아래 줄에 차례로 끼워 넣기
+    let after = st.parentNode;
+    const extra = vids.slice(1).map((v, k) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="name"></span><span class="st">대기</span><div class="bar"><i></i></div>`;
+      li.querySelector('.name').textContent = `@${t.user} · 영상 ${k + 2}/${vids.length}`;
+      after.after(li); after = li;
+      return { t, st: li.querySelector('.st'), url: bestMp4(v), file: `x_${t.id}_${k + 2}.mp4`, fx, state: 'wait' };
+    });
+    queue.splice(i + 1, 0, ...extra);
+  } catch {
+    q.state = 'bad'; st.className = 'st bad'; st.innerHTML = `정보 못 가져옴 <a href="${fx}" target="_blank">열기</a>`;
+  }
+}
+
+async function download(q) {
+  const st = q.st;
+  try {
+    const res = await fetch(q.url, { referrerPolicy: 'no-referrer' });
     if (!res.ok) throw new Error(res.status);
+    const bar = st.parentNode.querySelector(".bar i");
     const total = +res.headers.get('content-length') || 0;
     const reader = res.body.getReader();
     const chunks = []; let got = 0;
@@ -64,58 +153,36 @@ async function download(url, name) {
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(value); got += value.length;
-      status(total ? `받는 중… ${Math.round(got / total * 100)}%` : `받는 중… ${(got / 1048576).toFixed(1)}MB`);
+      const pct = total ? Math.round(got / total * 100) : 0;
+      st.textContent = total ? `${pct}% (${(got / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)}MB)` : `${(got / 1048576).toFixed(1)}MB`;
+      if (total) bar.style.width = pct + "%";
     }
     const blob = new Blob(chunks, { type: 'video/mp4' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = name;
+    a.download = q.file;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-    status('✅ 저장 완료! 갤러리 또는 "내 파일 → 다운로드"에서 확인하세요.');
-  } catch (e) {
-    // 바로 받기가 막히면 영상을 새 탭으로 열기 (⋮ → 다운로드)
-    status('바로 받기에 실패해 영상을 새 탭으로 엽니다.\n화면 오른쪽 위 ⋮ → "다운로드"를 눌러 주세요.');
-    window.open(url, '_blank');
+    bar.style.width = '100%'; bar.style.background = 'var(--ok)';
+    q.state = 'ok'; st.className = 'st ok'; st.textContent = '✅ 저장';
+    await new Promise(r => setTimeout(r, 800)); // 저장 사이 잠깐 쉬기
+  } catch {
+    q.state = 'bad'; st.className = 'st bad';
+    const b = st.parentNode.querySelector('.bar i'); b.style.width = '100%'; b.style.background = 'var(--bad)';
+    st.innerHTML = `실패 <a href="${q.url}" target="_blank">직접 열기</a>`;
   }
 }
 
-async function go() {
-  const t = parse($('input').value);
-  $('videos').innerHTML = '';
-  if (!t) { status('x.com 링크가 아닌 것 같아요. 다시 확인해 주세요.'); return; }
-  const fx = `https://d.fixupx.com/${t.user}/status/${t.id}`;
-  status(`영상 찾는 중…<br><a id="link" href="${fx}" target="_blank">${fx}</a>`);
-  try {
-    const r = await fetch(`https://api.fxtwitter.com/status/${t.id}`);
-    const d = await r.json();
-    const vids = (d.tweet && d.tweet.media && d.tweet.media.videos) || [];
-    if (!vids.length) { status(`이 글에는 영상이 없어요.<br><a id="link" href="${fx}" target="_blank">${fx}</a>`); return; }
-    if (vids.length === 1) return download(bestMp4(vids[0]), `x_${t.id}.mp4`);
-    status(`영상이 ${vids.length}개 있어요. 받을 영상을 누르세요.`);
-    vids.forEach((v, i) => {
-      const b = document.createElement('button');
-      b.textContent = `⬇️ 영상 ${i + 1} 받기`;
-      b.onclick = () => download(bestMp4(v), `x_${t.id}_${i + 1}.mp4`);
-      $('videos').appendChild(b);
-    });
-  } catch (e) {
-    // API가 안 되면 d.fixupx.com 주소로 바로 이동 (영상 파일로 연결됨)
-    status('d.fixupx.com 주소로 엽니다. 영상이 뜨면 ⋮ → "다운로드"를 눌러 주세요.');
-    location.href = fx;
-  }
-}
-
-$('goBtn').onclick = go;
+$('goBtn').onclick = add;
 $('pasteBtn').onclick = async () => {
-  try { $('input').value = await navigator.clipboard.readText(); go(); }
-  catch { status('붙여넣기 권한이 없어요. 입력칸을 길게 눌러 직접 붙여넣어 주세요.'); }
+  try { $('input').value = await navigator.clipboard.readText(); add(); }
+  catch { $('msg').textContent = '붙여넣기 권한이 없어요. 입력칸을 길게 눌러 직접 붙여넣어 주세요.'; }
 };
 
-// 주소 뒤에 ?url=링크 를 붙여 열면 자동 실행 (공유하기 연동용)
-const q = new URLSearchParams(location.search);
-const shared = q.get('url') || q.get('text');
-if (shared) { $('input').value = shared; go(); }
+// 주소 뒤에 ?url=링크 를 붙여 열면 자동 추가 (공유하기 연동용)
+const p = new URLSearchParams(location.search);
+const shared = p.get('url') || p.get('text');
+if (shared) { $('input').value = shared; add(); }
 </script>
 </body>
 </html>
