@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>X 영상 받기</title>
+<style>
+  :root { --bg:#f5f5f7; --card:#fff; --text:#111; --sub:#666; --line:#ddd; --accent:#1d9bf0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#000; --card:#16181c; --text:#e7e9ea; --sub:#8b98a5; --line:#2f3336; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif; }
+  main { max-width:480px; margin:0 auto; padding:24px 16px; }
+  h1 { font-size:22px; margin:0 0 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; }
+  textarea { width:100%; min-height:72px; font-size:16px; padding:12px; border-radius:12px; border:1px solid var(--line); background:transparent; color:var(--text); resize:vertical; }
+  button { width:100%; font-size:17px; font-weight:600; padding:14px; border:0; border-radius:12px; margin-top:10px; cursor:pointer; }
+  .primary { background:var(--accent); color:#fff; }
+  .ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  #status { margin-top:14px; font-size:15px; color:var(--sub); white-space:pre-line; }
+  #link { word-break:break-all; color:var(--accent); font-size:14px; }
+  video { width:100%; border-radius:12px; margin-top:12px; background:#000; }
+  .videos button { background:#00ba7c; color:#fff; }
+</style>
+</head>
+<body>
+<main>
+  <h1>X 영상 받기</h1>
+  <div class="card">
+    <textarea id="input" placeholder="x.com 링크를 붙여넣으세요"></textarea>
+    <button class="ghost" id="pasteBtn">📋 붙여넣기</button>
+    <button class="primary" id="goBtn">⬇️ 다운로드</button>
+    <div id="status"></div>
+    <div class="videos" id="videos"></div>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const status = msg => $('status').innerHTML = msg;
+
+// x.com / twitter.com 링크에서 글 번호(status id) 뽑기
+function parse(text) {
+  const m = text.match(/(?:x|twitter|fixupx|fxtwitter|vxtwitter)\.com\/([^\/\s?]+)\/status\/(\d+)/i);
+  return m ? { user: m[1], id: m[2] } : null;
+}
+
+// mp4 중 화질 가장 좋은 것 고르기
+function bestMp4(v) {
+  const list = (v.variants || []).filter(x => (x.content_type || '').includes('mp4') || /\.mp4/.test(x.url));
+  if (list.length) return list.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0].url;
+  return v.url;
+}
+
+async function download(url, name) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(res.status);
+    const total = +res.headers.get('content-length') || 0;
+    const reader = res.body.getReader();
+    const chunks = []; let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); got += value.length;
+      status(total ? `받는 중… ${Math.round(got / total * 100)}%` : `받는 중… ${(got / 1048576).toFixed(1)}MB`);
+    }
+    const blob = new Blob(chunks, { type: 'video/mp4' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    status('✅ 저장 완료! 갤러리 또는 "내 파일 → 다운로드"에서 확인하세요.');
+  } catch (e) {
+    // 바로 받기가 막히면 영상을 새 탭으로 열기 (⋮ → 다운로드)
+    status('바로 받기에 실패해 영상을 새 탭으로 엽니다.\n화면 오른쪽 위 ⋮ → "다운로드"를 눌러 주세요.');
+    window.open(url, '_blank');
+  }
+}
+
+async function go() {
+  const t = parse($('input').value);
+  $('videos').innerHTML = '';
+  if (!t) { status('x.com 링크가 아닌 것 같아요. 다시 확인해 주세요.'); return; }
+  const fx = `https://d.fixupx.com/${t.user}/status/${t.id}`;
+  status(`영상 찾는 중…<br><a id="link" href="${fx}" target="_blank">${fx}</a>`);
+  try {
+    const r = await fetch(`https://api.fxtwitter.com/status/${t.id}`);
+    const d = await r.json();
+    const vids = (d.tweet && d.tweet.media && d.tweet.media.videos) || [];
+    if (!vids.length) { status(`이 글에는 영상이 없어요.<br><a id="link" href="${fx}" target="_blank">${fx}</a>`); return; }
+    if (vids.length === 1) return download(bestMp4(vids[0]), `x_${t.id}.mp4`);
+    status(`영상이 ${vids.length}개 있어요. 받을 영상을 누르세요.`);
+    vids.forEach((v, i) => {
+      const b = document.createElement('button');
+      b.textContent = `⬇️ 영상 ${i + 1} 받기`;
+      b.onclick = () => download(bestMp4(v), `x_${t.id}_${i + 1}.mp4`);
+      $('videos').appendChild(b);
+    });
+  } catch (e) {
+    // API가 안 되면 d.fixupx.com 주소로 바로 이동 (영상 파일로 연결됨)
+    status('d.fixupx.com 주소로 엽니다. 영상이 뜨면 ⋮ → "다운로드"를 눌러 주세요.');
+    location.href = fx;
+  }
+}
+
+$('goBtn').onclick = go;
+$('pasteBtn').onclick = async () => {
+  try { $('input').value = await navigator.clipboard.readText(); go(); }
+  catch { status('붙여넣기 권한이 없어요. 입력칸을 길게 눌러 직접 붙여넣어 주세요.'); }
+};
+
+// 주소 뒤에 ?url=링크 를 붙여 열면 자동 실행 (공유하기 연동용)
+const q = new URLSearchParams(location.search);
+const shared = q.get('url') || q.get('text');
+if (shared) { $('input').value = shared; go(); }
+</script>
+</body>
+</html>
