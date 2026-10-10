@@ -32,6 +32,8 @@
   .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .st { flex-shrink:0; color:var(--sub); }
   .st.ok { color:var(--ok); } .st.bad { color:var(--bad); }
+  .st.dup { color:#f59e0b; text-align:right; }
+  .st.dup button { width:auto; margin:4px 0 0; padding:4px 8px; font-size:12px; background:transparent; color:var(--accent); border:1px solid var(--accent); }
   .st a { color:var(--accent); }
   .hist-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
   .hist-head h2 { font-size:16px; margin:0; }
@@ -105,8 +107,9 @@ function addRow(label) {
 function summary() {
   const done = queue.filter(q => q.state === 'ok').length;
   const bad = queue.filter(q => q.state === 'bad').length;
+  const dup = queue.filter(q => q.state === 'dup').length;
   const left = queue.filter(q => q.state === 'find' || q.state === 'wait' || q.state === 'run').length;
-  $('summary').textContent = `완료 ${done} · 남음 ${left}` + (bad ? ` · 실패 ${bad}` : '');
+  $('summary').textContent = `완료 ${done} · 남음 ${left}` + (dup ? ` · 이미 받음 ${dup}` : '') + (bad ? ` · 실패 ${bad}` : '');
 }
 
 async function add() {
@@ -153,6 +156,7 @@ async function expand(q, i) {
     q.thumb = vids[0].thumbnail_url;
     q.url = bestMp4(vids[0]); const base = fileBase(d.tweet, t);
     q.file = vids.length > 1 ? `${base}_1.mp4` : `${base}.mp4`; q.fx = fx; q.state = 'wait';
+    checkDup(q);
     // 2번째 영상부터 바로 아래 줄에 차례로 끼워 넣기
     let after = st.closest("li");
     const extra = vids.slice(1).map((v, k) => {
@@ -161,7 +165,9 @@ async function expand(q, i) {
       li.querySelector('.name').textContent = `@${t.user} · 영상 ${k + 2}/${vids.length}`;
       if (v.thumbnail_url) li.querySelector('.thumb').src = v.thumbnail_url;
       after.after(li); after = li;
-      return { t, st: li.querySelector('.st'), thumb: v.thumbnail_url, url: bestMp4(v), file: `${base}_${k + 2}.mp4`, fx, state: 'wait' };
+      const e = { t, st: li.querySelector('.st'), thumb: v.thumbnail_url, url: bestMp4(v), file: `${base}_${k + 2}.mp4`, fx, state: 'wait' };
+      checkDup(e);
+      return e;
     });
     queue.splice(i + 1, 0, ...extra);
   } catch {
@@ -208,10 +214,33 @@ const HKEY = 'xdown_history';
 function loadHistory() { try { return JSON.parse(localStorage.getItem(HKEY)) || []; } catch { return []; } }
 function saveHistory(q) {
   const h = loadHistory();
-  h.unshift({ user: q.t.user, file: q.file, thumb: q.thumb || '', fx: q.fx, at: Date.now() });
+  h.unshift({ user: q.t.user, id: q.t.id, media: mediaKey(q.url), file: q.file, thumb: q.thumb || '', fx: q.fx, at: Date.now() });
   try { localStorage.setItem(HKEY, JSON.stringify(h.slice(0, 100))); } catch {}
   renderHistory();
 }
+// 영상 고유번호: 영상 주소 속 번호(.../ext_tw_video/1234/...). 다른 사람이 퍼 간 글이어도 같은 영상이면 번호가 같음
+function mediaKey(url) {
+  const m = /_video\/(\d+)/.exec(url || '');
+  return m ? m[1] : (url || '').split('?')[0];
+}
+// 예전에 받은 영상인지 확인 → 맞으면 받지 않고 "이미 받음" 표시 + 다시 받기 버튼
+function checkDup(q) {
+  const key = mediaKey(q.url);
+  const x = loadHistory().find(h => h.media ? h.media === key
+    : (h.fx || '').endsWith(`/status/${q.t.id}`)); // 예전 내역(번호 저장 전)은 글 주소로 비교
+  if (!x) return;
+  const d = new Date(x.at);
+  const when = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const other = x.id && x.id !== q.t.id ? ` (@${x.user} 글)` : '';
+  q.state = 'dup';
+  q.st.className = 'st dup';
+  q.st.innerHTML = `⚠️ 이미 받음 ${when}${other}<br><button>다시 받기</button>`;
+  q.st.querySelector('button').onclick = () => {
+    q.state = 'wait'; q.st.className = 'st'; q.st.textContent = '대기';
+    summary(); run();
+  };
+}
+
 function renderHistory() {
   const h = loadHistory();
   $('histCard').hidden = !h.length;
