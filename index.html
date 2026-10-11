@@ -51,11 +51,11 @@
 </head>
 <body>
 <main>
-  <h1>X 영상 받기 <span class="ver">v14 · 10/11</span></h1>
+  <h1>X 영상 받기 <span class="ver">v15 · 10/11</span></h1>
   <div class="card">
     <textarea id="input" placeholder="x.com 링크를 붙여넣으세요 (여러 개면 줄을 바꿔서)"></textarea>
     <div class="seg"><button id="modePhone">📱 휴대폰에 저장</button><button id="modeDrive">☁️ 구글 드라이브로</button></div>
-    <div class="hint">X 링크를 복사한 뒤 원하는 버튼을 누르면 바로 받기 시작해요. 입력칸에 직접 붙여넣으면 파란색으로 표시된 방식으로 받아요.</div>
+    <div class="hint">X 링크를 복사한 뒤 원하는 버튼을 누르면 바로 받기 시작해요. 입력칸에 직접 붙여넣으면 파란색으로 표시된 방식으로 받아요.<br>⚠️ 받는 동안 이 화면을 켜 두세요. 창을 내리면 멈추지만, 다시 열면 받던 데서 이어 받아요.</div>
     <div id="msg"></div>
   </div>
   <div class="card" id="queueCard">
@@ -203,9 +203,27 @@ async function add() {
 }
 
 // 하나씩 순서대로 처리 (동시에 받으면 폰에서 막히거나 메모리가 부족해질 수 있음)
+// 받는 동안 화면이 저절로 꺼지지 않게 (창을 내리면 풀림 → 다시 열면 다시 켬)
+let lock = null;
+async function keepAwake(on) {
+  try {
+    if (on && !lock && navigator.wakeLock && !document.hidden) { lock = await navigator.wakeLock.request('screen'); lock.onrelease = () => { lock = null; }; }
+    if (!on && lock) { await lock.release(); lock = null; }
+  } catch {}
+}
+// 창을 내리면 휴대폰이 인터넷 연결을 끊음 → 다시 열었을 때 끊긴 영상을 이어서 받기
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if (running) keepAwake(true);
+  const cut = queue.filter(q => q.state === 'bad' && q.cut);
+  if (cut.length) { $('msg').textContent = `멈췄던 영상 ${cut.length}개를 이어서 받아요.`; cut.forEach(retry); }
+});
+
 async function run() {
   if (running) return;
   running = true;
+  keepAwake(true);
   for (let i = 0; i < queue.length; i++) {
     const q = queue[i];
     if (q.state === 'find') { await expand(q, i); summary(); }
@@ -213,6 +231,7 @@ async function run() {
   }
   running = false;
   if (queue.some(q => q.state === 'find' || q.state === 'wait')) run();
+  else keepAwake(false);
 }
 
 // 글 하나에 영상이 여러 개면 각각 목록에 펼치기
@@ -267,7 +286,7 @@ function fail(q, text, link) {
 }
 function retry(q) {
   q.state = q.url ? 'wait' : 'find';
-  q.st.className = 'st'; q.st.textContent = '대기';
+  q.st.className = 'st'; q.st.textContent = q.got ? `이어 받기 대기 (${(q.got / 1048576).toFixed(1)}MB 받음)` : '대기';
   const b = q.st.closest('li').querySelector('.bar i'); b.style.width = '0'; b.style.background = 'var(--accent)';
   summary(); run();
 }
@@ -281,22 +300,30 @@ async function download(q) {
   };
   if (!safeUrl(q.url)) { block('X 공식 서버가 아니에요'); return; }
   try {
-    const res = await fetch(q.url, { referrerPolicy: 'no-referrer' });
+    q.cut = false;
+    // 전에 받다 끊긴 부분이 있으면 그 뒤부터만 요청 (Range)
+    if (!q.chunks) { q.chunks = []; q.got = 0; }
+    const headers = q.got && !q.noRange ? { Range: `bytes=${q.got}-` } : {};
+    const res = await fetch(q.url, { referrerPolicy: 'no-referrer', headers });
     if (!res.ok) throw new Error(res.status);
     if (!safeUrl(res.url)) { block('다른 서버로 넘어갔어요'); return; }
+    if (res.status !== 206) { q.chunks = []; q.got = 0; } // 이어 받기를 못 하면 처음부터
     const bar = st.closest("li").querySelector(".bar i");
-    const total = +res.headers.get('content-length') || 0;
+    const cr = /\/(\d+)$/.exec(res.headers.get('content-range') || '');
+    const total = cr ? +cr[1] : (+res.headers.get('content-length') || 0);
     const reader = res.body.getReader();
-    const chunks = []; let got = 0;
+    const chunks = q.chunks;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      chunks.push(value); got += value.length;
+      chunks.push(value); q.got += value.length;
+      const got = q.got;
       const pct = total ? Math.round(got / total * 100) : 0;
       st.textContent = total ? `${pct}% (${(got / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)}MB)` : `${(got / 1048576).toFixed(1)}MB`;
       if (total) bar.style.width = pct + "%";
     }
     const blob = new Blob(chunks, { type: 'video/mp4' });
+    q.chunks = null; q.got = 0;
     const why = await safeFile(blob);
     if (why) { block(why); return; }
     if (q.mode === 'drive') {
@@ -317,6 +344,14 @@ async function download(q) {
     saveHistory(q);
     await new Promise(r => setTimeout(r, 800)); // 저장 사이 잠깐 쉬기
   } catch (e) {
+    // 연결 끊김 + 창을 내렸던 경우 → 다시 열면 자동으로 이어 받기
+    if (!/^\d{3}$/.test(String(e && e.message)) && (document.hidden || Date.now() - hiddenAt < 60000)) {
+      q.cut = true;
+      fail(q, '⏸️ 창을 내려서 멈춤 · 다시 열면 이어 받아요', q.url);
+      return;
+    }
+    // 이어 받기 요청을 브라우저·서버가 거절했을 수 있음 → 이어 받기 끄고 처음부터 한 번 더
+    if (q.got && !q.noRange) { q.noRange = true; q.chunks = null; q.got = 0; retry(q); return; }
     fail(q, '실패' + reason(e), q.url);
   }
 }
