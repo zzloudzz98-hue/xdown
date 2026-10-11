@@ -51,7 +51,7 @@
 </head>
 <body>
 <main>
-  <h1>X 영상 받기 <span class="ver">v19 · 10/11</span></h1>
+  <h1>X 영상 받기 <span class="ver">v20 · 10/11</span></h1>
   <div class="card">
     <textarea id="input" placeholder="x.com 링크를 붙여넣으세요 (여러 개면 줄을 바꿔서)"></textarea>
     <div class="seg"><button id="modePhone">📱 휴대폰에 저장</button><button id="modeDrive">☁️ 구글 드라이브로</button></div>
@@ -517,9 +517,11 @@ const HKEY = 'xdown_history';
 function loadHistory() { try { return JSON.parse(localStorage.getItem(HKEY)) || []; } catch { return []; } }
 function saveHistory(q) {
   const h = loadHistory();
-  h.unshift({ user: q.t.user, id: q.t.id, media: mediaKey(q.url), file: q.file, thumb: q.thumb || '', fx: q.fx, at: Date.now() });
-  try { localStorage.setItem(HKEY, JSON.stringify(h.slice(0, 100))); } catch {}
+  const e = { user: q.t.user, id: q.t.id, media: mediaKey(q.url), file: q.file, thumb: q.thumb || '', fx: q.fx, at: Date.now() };
+  h.unshift(e);
+  try { localStorage.setItem(HKEY, JSON.stringify(h.slice(0, 1000))); } catch {}
   renderHistory();
+  pushSync([e]);
 }
 // 영상 고유번호: 영상 주소 속 번호(.../ext_tw_video/1234/...). 다른 사람이 퍼 간 글이어도 같은 영상이면 번호가 같음
 function mediaKey(url) {
@@ -548,7 +550,7 @@ function renderHistory() {
   const h = loadHistory();
   $('clearBtn').hidden = !h.length;
   $('hist').innerHTML = h.length ? '' : '<li class="hint">아직 받은 영상이 없어요.</li>';
-  h.forEach(x => {
+  h.slice(0, 50).forEach(x => {
     const li = document.createElement('li');
     const d = new Date(x.at);
     li.innerHTML = `<img class="thumb" alt=""><div class="info"><div class="top"><span class="name"></span><span class="st"><a target="_blank">원본</a></span></div><div class="hint"></div></div>`;
@@ -560,11 +562,62 @@ function renderHistory() {
   });
 }
 $('clearBtn').onclick = () => {
-  if (!confirm('받은 내역을 지울까요? (받은 영상 파일은 그대로 남아요)')) return;
+  const s = syncInfo();
+  if (!confirm(s ? '받은 내역을 지울까요? 연결된 다른 기기의 내역도 함께 지워져요. (받은 영상 파일은 그대로 남아요)'
+                 : '받은 내역을 지울까요? (받은 영상 파일은 그대로 남아요)')) return;
   try { localStorage.removeItem(HKEY); } catch {}
+  if (s) fetch(s.url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ k: s.k, clear: true }) }).catch(() => {});
   renderHistory();
 };
 renderHistory();
+
+// ── 받은 내역 동기화: 같은 구글 계정(앱스 스크립트)에 모아 두고 모든 기기가 같이 봄 ──
+// 기기마다 '연결 링크'(주소 뒤 #s=…)를 한 번 열면 이 브라우저에 기억됨
+const SKEY = 'xdown_sync';
+function syncInfo() { try { return JSON.parse(localStorage.getItem(SKEY)); } catch { return null; } }
+(function () {
+  const m = /[#&]s=([^&]+)/.exec(location.hash);
+  if (!m) return;
+  try {
+    const [url, k] = atob(decodeURIComponent(m[1])).split('|');
+    if (/^https:\/\/script\.google\.com\//.test(url) && k) {
+      localStorage.setItem(SKEY, JSON.stringify({ url, k }));
+      $('msg').textContent = '✅ 이 기기를 받은 내역 동기화에 연결했어요.';
+    }
+  } catch {}
+  history.replaceState(null, '', location.pathname + location.search); // 주소창에서 비밀번호 지우기
+})();
+function pushSync(list) {
+  const s = syncInfo();
+  if (!s || !list.length) return;
+  fetch(s.url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ k: s.k, add: list }) }).catch(() => {});
+}
+let pulling = false;
+async function pullSync() {
+  const s = syncInfo();
+  if (!s || pulling) return;
+  pulling = true;
+  try {
+    const d = await (await fetch(`${s.url}?k=${encodeURIComponent(s.k)}`)).json();
+    if (d.ok) {
+      const key = x => x.media || x.id;
+      const h = loadHistory(), mine = new Set(h.map(key)), remote = new Set(d.list.map(key));
+      const add = d.list.filter(x => !mine.has(key(x)));
+      if (add.length) {
+        const all = h.concat(add).sort((a, b) => (b.at || 0) - (a.at || 0));
+        try { localStorage.setItem(HKEY, JSON.stringify(all.slice(0, 1000))); } catch {}
+        renderHistory();
+        // 목록에 있는데 다른 기기에서 이미 받은 영상이면 '이미 받음'으로
+        queue.filter(q => q.state === 'wait' && q.url).forEach(checkDup);
+        summary();
+      }
+      pushSync(h.filter(x => !remote.has(key(x)))); // 이 기기에만 있던 내역은 올리기
+    }
+  } catch {}
+  pulling = false;
+}
+pullSync();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) pullSync(); });
 
 const QKEY = 'xdown_queue';
 function saveQueue() {
