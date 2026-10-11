@@ -51,7 +51,7 @@
 </head>
 <body>
 <main>
-  <h1>X 영상 받기 <span class="ver">v16 · 10/11</span></h1>
+  <h1>X 영상 받기 <span class="ver">v17 · 10/11</span></h1>
   <div class="card">
     <textarea id="input" placeholder="x.com 링크를 붙여넣으세요 (여러 개면 줄을 바꿔서)"></textarea>
     <div class="seg"><button id="modePhone">📱 휴대폰에 저장</button><button id="modeDrive">☁️ 구글 드라이브로</button></div>
@@ -228,6 +228,7 @@ const swReady = BG
   : Promise.resolve(null);
 
 async function startBg(q) {
+  if (q.noBg || noBg()) return false;
   const reg = await swReady;
   if (!reg || !reg.backgroundFetch) return false;
   q.bgId = 'x' + Date.now() + Math.random().toString(36).slice(2, 6);
@@ -245,9 +246,27 @@ async function startBg(q) {
   }
 }
 
+// 백그라운드 받기가 시작은 되는데 실제로는 안 받아지는 브라우저가 있음 → 기억해 두고 다음부턴 바로 예전 방식
+const NOBG = 'xdown_nobg';
+function noBg() { try { return localStorage.getItem(NOBG) === '1'; } catch { return false; } }
+
 function watchBg(q, bf) {
   const st = q.st, bar = st.closest('li').querySelector('.bar i');
   st.className = 'st'; st.textContent = '받는 중 (창 내려도 OK)';
+  // 화면을 켜 둔 채 12초가 지나도 1바이트도 안 받아지면 → 예전 방식(화면 켜 두고 받기)으로 바꿈
+  let waited = 0;
+  const timer = setInterval(async () => {
+    if (bf.result || bf.downloaded > 0 || q.state !== 'bg') { clearInterval(timer); return; }
+    if (document.hidden) return;
+    if ((waited += 1) < 12) return;
+    clearInterval(timer);
+    try { localStorage.setItem(NOBG, '1'); } catch {}
+    const id = q.bgId; q.bgId = null; q.noBg = true;
+    try { await (await caches.open('xdown')).delete(`meta/${id}`); } catch {}
+    try { await bf.abort(); } catch {}
+    $('msg').textContent = '이 브라우저는 창을 내리면 받기가 멈춰요. 받는 동안 화면을 켜 두세요. (Chrome 앱에선 창 내려도 받아져요)';
+    q.state = 'wait'; st.textContent = '대기'; summary(); run();
+  }, 1000);
   bf.addEventListener('progress', () => {
     if (bf.result) return; // 끝난 뒤 처리는 collectDone()
     const got = bf.downloaded, total = bf.downloadTotal;
