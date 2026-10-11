@@ -41,8 +41,8 @@
   .hist-head button { width:auto; margin:0; padding:6px 10px; font-size:13px; background:transparent; color:var(--sub); border:1px solid var(--line); }
   #hist .st a { font-size:13px; }
   #summary { font-size:14px; color:var(--sub); margin-bottom:6px; }
-  .seg { display:flex; gap:6px; margin-bottom:12px; }
-  .seg button { margin:0; padding:10px; font-size:15px; background:transparent; color:var(--sub); border:1px solid var(--line); }
+  .seg { display:flex; gap:8px; }
+  .seg button { margin-top:10px; padding:16px 8px; font-size:16px; background:transparent; color:var(--accent); border:1px solid var(--accent); }
   .seg button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
   .st.ok button, .st.ready button { width:auto; margin:4px 0 0; padding:6px 10px; font-size:13px; background:var(--accent); color:#fff; }
   .st.ready { color:var(--ok); text-align:right; }
@@ -51,20 +51,19 @@
 </head>
 <body>
 <main>
-  <h1>X 영상 받기 <span class="ver">v11 · 10/11</span></h1>
+  <h1>X 영상 받기 <span class="ver">v13 · 10/11</span></h1>
   <div class="card">
-    <div class="seg"><button id="modePhone">📱 휴대폰에 저장</button><button id="modeDrive">☁️ 구글 드라이브로</button></div>
     <textarea id="input" placeholder="x.com 링크를 붙여넣으세요 (여러 개면 줄을 바꿔서)"></textarea>
-    <button class="primary" id="pasteBtn">📋 붙여넣기</button>
-    <div class="hint">붙여넣으면 바로 받기 시작해요. 받는 중에도 다음 링크를 계속 붙여넣으세요.</div>
+    <div class="seg"><button id="modePhone">📱 휴대폰에 저장</button><button id="modeDrive">☁️ 구글 드라이브로</button></div>
+    <div class="hint">X 링크를 복사한 뒤 원하는 버튼을 누르면 바로 받기 시작해요. 입력칸에 직접 붙여넣으면 파란색으로 표시된 방식으로 받아요.</div>
     <div id="msg"></div>
   </div>
-  <div class="card" id="queueCard" hidden>
-    <div id="summary"></div>
+  <div class="card" id="queueCard">
+    <div id="summary">아직 받는 영상이 없어요. 링크를 복사하고 위 버튼을 눌러 주세요.</div>
     <button class="primary" id="allDrive" hidden></button>
     <ul id="list"></ul>
   </div>
-  <div class="card" id="histCard" hidden>
+  <div class="card" id="histCard">
     <div class="hist-head"><h2>받은 내역</h2><button id="clearBtn">내역 지우기</button></div>
     <ul id="hist" class="list"></ul>
   </div>
@@ -133,8 +132,14 @@ function setMode(m) {
   $('modePhone').classList.toggle('on', m === 'phone');
   $('modeDrive').classList.toggle('on', m === 'drive');
 }
-$('modePhone').onclick = () => setMode('phone');
-$('modeDrive').onclick = () => setMode('drive');
+// 버튼 = 방식 고르기 + 복사한 링크 붙여넣기를 한 번에
+async function pasteGo(m) {
+  setMode(m);
+  try { $('input').value = await navigator.clipboard.readText(); add(); }
+  catch { $('msg').textContent = '붙여넣기 권한이 없어요. 입력칸을 길게 눌러 직접 붙여넣어 주세요.'; }
+}
+$('modePhone').onclick = () => pasteGo('phone');
+$('modeDrive').onclick = () => pasteGo('drive');
 setMode(mode);
 
 // 안전 확인 ①: X 공식 영상 서버 주소인지
@@ -184,7 +189,7 @@ async function add() {
     if (seen.has(t.id)) continue;
     seen.add(t.id); added++;
     const st = addRow(`@${t.user} · 영상 찾는 중…`);
-    queue.push({ t, st, state: 'find' });
+    queue.push({ t, st, state: 'find', mode });
   }
   $('msg').textContent = added ? `${added}개 추가했어요.` : '이미 목록에 있는 링크예요.';
   summary();
@@ -228,7 +233,7 @@ async function expand(q, i) {
       li.querySelector('.name').textContent = `@${t.user} · 영상 ${k + 2}/${vids.length}`;
       if (v.thumbnail_url) li.querySelector('.thumb').src = v.thumbnail_url;
       after.after(li); after = li;
-      const e = { t, st: li.querySelector('.st'), thumb: v.thumbnail_url, url: bestMp4(v), file: `${base}_${k + 2}.mp4`, fx, state: 'wait' };
+      const e = { t, st: li.querySelector('.st'), thumb: v.thumbnail_url, url: bestMp4(v), file: `${base}_${k + 2}.mp4`, fx, state: 'wait', mode: q.mode };
       checkDup(e);
       return e;
     });
@@ -265,7 +270,7 @@ async function download(q) {
     const blob = new Blob(chunks, { type: 'video/mp4' });
     const why = await safeFile(blob);
     if (why) { block(why); return; }
-    if (mode === 'drive') {
+    if (q.mode === 'drive') {
       // 휴대폰에 저장하지 않고 들고 있다가, 버튼을 누르면 드라이브로
       q.blob = blob; q.state = 'ready';
       bar.style.width = '100%'; bar.style.background = 'var(--ok)';
@@ -323,8 +328,8 @@ function checkDup(q) {
 
 function renderHistory() {
   const h = loadHistory();
-  $('histCard').hidden = !h.length;
-  $('hist').innerHTML = '';
+  $('clearBtn').hidden = !h.length;
+  $('hist').innerHTML = h.length ? '' : '<li class="hint">아직 받은 영상이 없어요.</li>';
   h.forEach(x => {
     const li = document.createElement('li');
     const d = new Date(x.at);
@@ -345,10 +350,6 @@ renderHistory();
 
 // 입력칸을 길게 눌러 직접 붙여넣어도 바로 받기 시작
 $('input').addEventListener('paste', () => setTimeout(add, 0));
-$('pasteBtn').onclick = async () => {
-  try { $('input').value = await navigator.clipboard.readText(); add(); }
-  catch { $('msg').textContent = '붙여넣기 권한이 없어요. 입력칸을 길게 눌러 직접 붙여넣어 주세요.'; }
-};
 
 // 주소 뒤에 ?url=링크 를 붙여 열면 자동 추가 (공유하기 연동용)
 const p = new URLSearchParams(location.search);
