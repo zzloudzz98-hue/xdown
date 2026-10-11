@@ -51,7 +51,7 @@
 </head>
 <body>
 <main>
-  <h1>X 영상 받기 <span class="ver">v18 · 10/11</span></h1>
+  <h1>X 영상 받기 <span class="ver">v19 · 10/11</span></h1>
   <div class="card">
     <textarea id="input" placeholder="x.com 링크를 붙여넣으세요 (여러 개면 줄을 바꿔서)"></textarea>
     <div class="seg"><button id="modePhone">📱 휴대폰에 저장</button><button id="modeDrive">☁️ 구글 드라이브로</button></div>
@@ -174,6 +174,7 @@ async function toDrive(list) {
   }
   list.forEach(q => {
     q.blob = null; // 메모리에서 지우기
+    caches.open('xdown').then(c => c.delete(`ready/${mediaKey(q.url)}`)).catch(() => {});
     q.state = 'ok'; q.st.className = 'st ok'; q.st.textContent = '☁️ 드라이브로 보냄';
     saveHistory(q);
   });
@@ -427,6 +428,15 @@ function retry(q) {
   summary(); run();
 }
 
+// 드라이브로 보낼 준비 끝난 줄
+function showReady(q, blob) {
+  const st = q.st, bar = st.closest('li').querySelector('.bar i');
+  q.blob = blob; q.state = 'ready';
+  bar.style.width = '100%'; bar.style.background = 'var(--ok)';
+  st.className = 'st ready'; st.innerHTML = '🛡️ 안전 확인됨<br><button>☁️ 드라이브로</button>';
+  st.querySelector('button').onclick = () => toDrive([q]);
+  summary();
+}
 // 다 받은 영상: 안전 확인 → 휴대폰 저장 또는 드라이브 대기
 async function finish(q, blob) {
   const st = q.st, bar = st.closest("li").querySelector(".bar i");
@@ -438,10 +448,9 @@ async function finish(q, blob) {
   if (why) { block(why); return; }
   if (q.mode === 'drive') {
     // 휴대폰에 저장하지 않고 들고 있다가, 버튼을 누르면 드라이브로
-    q.blob = blob; q.state = 'ready';
-    bar.style.width = '100%'; bar.style.background = 'var(--ok)';
-    st.className = 'st ready'; st.innerHTML = '🛡️ 안전 확인됨<br><button>☁️ 드라이브로</button>';
-    st.querySelector('button').onclick = () => toDrive([q]);
+    // 페이지가 새로 불려도 다시 안 받게 보관함에도 넣어 둠
+    try { await (await caches.open('xdown')).put(`ready/${mediaKey(q.url)}`, new Response(blob)); } catch {}
+    showReady(q, blob);
     return;
   }
   const a = document.createElement('a');
@@ -560,7 +569,7 @@ renderHistory();
 const QKEY = 'xdown_queue';
 function saveQueue() {
   const keep = queue.filter(q => !['ok', 'dup', 'gone'].includes(q.state)).map(q => ({
-    t: q.t, url: q.url, file: q.file, mode: q.mode, thumb: q.thumb, fx: q.fx, bgId: q.bgId, state: q.state,
+    t: q.t, url: q.url, file: q.file, mode: q.mode, thumb: q.thumb, fx: q.fx, bgId: q.bgId, state: q.state === 'restore' ? 'ready' : q.state,
     refill: q.refill, label: q.st.closest('li').querySelector('.name').textContent,
   }));
   try { keep.length ? localStorage.setItem(QKEY, JSON.stringify(keep)) : localStorage.removeItem(QKEY); } catch {}
@@ -577,6 +586,14 @@ function loadQueue() {
     if (!x.url) q.state = 'find';
     else if (x.state === 'bg' && x.bgId) { q.state = 'bg'; q.bgId = x.bgId; st.textContent = '받는 중 확인…'; }
     else if (x.state === 'bad') fail(q, '실패', x.url);
+    else if (x.state === 'ready') {
+      // 다 받아 둔 영상은 보관함에서 꺼내기 (없으면 다시 받기)
+      q.state = 'restore'; st.textContent = '불러오는 중…';
+      caches.open('xdown').then(c => c.match(`ready/${mediaKey(x.url)}`))
+        .then(res => res ? res.blob() : null)
+        .then(b => { if (b) showReady(q, b); else { q.state = 'wait'; st.textContent = '대기'; run(); } })
+        .catch(() => { q.state = 'wait'; st.textContent = '대기'; run(); });
+    }
     else q.state = 'wait';
   }
   if (list.length) { $('msg').textContent = `남아 있던 영상 ${list.length}개를 다시 불러왔어요.`; summary(); }
