@@ -44,14 +44,14 @@
   .seg { display:flex; gap:8px; }
   .seg button { margin-top:10px; padding:16px 8px; font-size:16px; background:transparent; color:var(--accent); border:1px solid var(--accent); }
   .seg button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
-  .st.ok button, .st.ready button { width:auto; margin:4px 0 0; padding:6px 10px; font-size:13px; background:var(--accent); color:#fff; }
+  .st.ok button, .st.ready button, .st.bad button { width:auto; margin:4px 0 0; padding:6px 10px; font-size:13px; background:var(--accent); color:#fff; }
   .st.ready { color:var(--ok); text-align:right; }
   #allDrive { margin:0 0 8px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>X 영상 받기 <span class="ver">v13 · 10/11</span></h1>
+  <h1>X 영상 받기 <span class="ver">v14 · 10/11</span></h1>
   <div class="card">
     <textarea id="input" placeholder="x.com 링크를 붙여넣으세요 (여러 개면 줄을 바꿔서)"></textarea>
     <div class="seg"><button id="modePhone">📱 휴대폰에 저장</button><button id="modeDrive">☁️ 구글 드라이브로</button></div>
@@ -184,14 +184,20 @@ async function add() {
   const items = parseAll($('input').value);
   $('input').value = '';
   if (!items.length) { $('msg').textContent = 'x.com 링크를 못 찾았어요. 다시 확인해 주세요.'; return; }
-  let added = 0;
+  let added = 0, again = 0;
   for (const t of items) {
-    if (seen.has(t.id)) continue;
+    if (seen.has(t.id)) {
+      // 실패했던 링크를 다시 넣으면 다시 받기
+      const failed = queue.filter(q => q.t.id === t.id && q.state === 'bad');
+      failed.forEach(q => { q.mode = mode; retry(q); });
+      again += failed.length;
+      continue;
+    }
     seen.add(t.id); added++;
     const st = addRow(`@${t.user} · 영상 찾는 중…`);
     queue.push({ t, st, state: 'find', mode });
   }
-  $('msg').textContent = added ? `${added}개 추가했어요.` : '이미 목록에 있는 링크예요.';
+  $('msg').textContent = added ? `${added}개 추가했어요.` : again ? '실패했던 영상을 다시 받아요.' : '이미 목록에 있는 링크예요.';
   summary();
   run();
 }
@@ -217,7 +223,7 @@ async function expand(q, i) {
   try {
     const d = await (await fetch(`https://api.fxtwitter.com/status/${t.id}`)).json();
     const vids = (d.tweet && d.tweet.media && d.tweet.media.videos) || [];
-    if (!vids.length) { q.state = 'bad'; st.className = 'st bad'; st.innerHTML = `영상 없음 <a href="${fx}" target="_blank">열기</a>`; return; }
+    if (!vids.length) { fail(q, '영상 없음', fx); return; }
     const name = st.closest("li").querySelector('.name');
     name.textContent = `@${t.user}` + (vids.length > 1 ? ` · 영상 1/${vids.length}` : '');
     if (vids[0].thumbnail_url) st.closest("li").querySelector('.thumb').src = vids[0].thumbnail_url;
@@ -239,8 +245,31 @@ async function expand(q, i) {
     });
     queue.splice(i + 1, 0, ...extra);
   } catch {
-    q.state = 'bad'; st.className = 'st bad'; st.innerHTML = `정보 못 가져옴 <a href="${fx}" target="_blank">열기</a>`;
+    fail(q, '정보 못 가져옴', fx);
   }
+}
+
+// 실패 이유를 짧게: 403(막힘)·404(없음)·연결 끊김 등
+function reason(e) {
+  const m = String((e && e.message) || '');
+  if (/^\d{3}$/.test(m)) return m === '403' ? ' (X가 막음 403)' : m === '404' ? ' (영상 없음 404)' : ` (${m})`;
+  return ' (연결 끊김)';
+}
+function fail(q, text, link) {
+  q.state = 'bad'; q.blob = null;
+  const st = q.st, b = st.closest('li').querySelector('.bar i');
+  b.style.width = '100%'; b.style.background = 'var(--bad)';
+  st.className = 'st bad';
+  st.innerHTML = `${text} <a target="_blank">열기</a><br><button>다시 받기</button>`;
+  st.querySelector('a').href = link;
+  st.querySelector('button').onclick = () => retry(q);
+  summary();
+}
+function retry(q) {
+  q.state = q.url ? 'wait' : 'find';
+  q.st.className = 'st'; q.st.textContent = '대기';
+  const b = q.st.closest('li').querySelector('.bar i'); b.style.width = '0'; b.style.background = 'var(--accent)';
+  summary(); run();
 }
 
 async function download(q) {
@@ -287,10 +316,8 @@ async function download(q) {
     q.state = 'ok'; st.className = 'st ok'; st.textContent = '🛡️ 확인 · ✅ 저장';
     saveHistory(q);
     await new Promise(r => setTimeout(r, 800)); // 저장 사이 잠깐 쉬기
-  } catch {
-    q.state = 'bad'; st.className = 'st bad';
-    const b = st.closest("li").querySelector('.bar i'); b.style.width = '100%'; b.style.background = 'var(--bad)';
-    st.innerHTML = `실패 <a href="${q.url}" target="_blank">직접 열기</a>`;
+  } catch (e) {
+    fail(q, '실패' + reason(e), q.url);
   }
 }
 
