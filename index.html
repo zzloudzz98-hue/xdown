@@ -51,11 +51,11 @@
 </head>
 <body>
 <main>
-  <h1>X 영상 받기 <span class="ver">v15 · 10/11</span></h1>
+  <h1>X 영상 받기 <span class="ver">v16 · 10/11</span></h1>
   <div class="card">
     <textarea id="input" placeholder="x.com 링크를 붙여넣으세요 (여러 개면 줄을 바꿔서)"></textarea>
     <div class="seg"><button id="modePhone">📱 휴대폰에 저장</button><button id="modeDrive">☁️ 구글 드라이브로</button></div>
-    <div class="hint">X 링크를 복사한 뒤 원하는 버튼을 누르면 바로 받기 시작해요. 입력칸에 직접 붙여넣으면 파란색으로 표시된 방식으로 받아요.<br>⚠️ 받는 동안 이 화면을 켜 두세요. 창을 내리면 멈추지만, 다시 열면 받던 데서 이어 받아요.</div>
+    <div class="hint">X 링크를 복사한 뒤 원하는 버튼을 누르면 바로 받기 시작해요. 입력칸에 직접 붙여넣으면 파란색으로 표시된 방식으로 받아요.<br>받는 중에 창을 내리거나 다른 앱으로 넘어가도 계속 받아요(알림창에 진행 표시). 다 받으면 알림을 누르거나 이 페이지로 돌아오면 저장돼요.</div>
     <div id="msg"></div>
   </div>
   <div class="card" id="queueCard">
@@ -115,7 +115,7 @@ function summary() {
   const done = queue.filter(q => q.state === 'ok').length;
   const bad = queue.filter(q => q.state === 'bad').length;
   const dup = queue.filter(q => q.state === 'dup').length;
-  const left = queue.filter(q => q.state === 'find' || q.state === 'wait' || q.state === 'run').length;
+  const left = queue.filter(q => q.state === 'find' || q.state === 'wait' || q.state === 'run' || q.state === 'bg').length;
   const ready = queue.filter(q => q.state === 'ready').length;
   $('summary').textContent = `완료 ${done} · 남음 ${left}` + (ready ? ` · 드라이브 대기 ${ready}` : '') + (dup ? ` · 이미 받음 ${dup}` : '') + (bad ? ` · 실패 ${bad}` : '');
   $('allDrive').hidden = ready < 2;
@@ -220,6 +220,94 @@ document.addEventListener('visibilitychange', () => {
   if (cut.length) { $('msg').textContent = `멈췄던 영상 ${cut.length}개를 이어서 받아요.`; cut.forEach(retry); }
 });
 
+// ── 백그라운드 받기: 창을 내리거나 다른 앱으로 가도 휴대폰이 대신 받아 줌 (Chrome·삼성 인터넷) ──
+// 받는 일은 sw.js(페이지 뒤에서 도는 작은 도우미)가 맡고, 다 받은 파일은 잠깐 보관함(cache)에 넣어 둠
+const BG = 'serviceWorker' in navigator && 'BackgroundFetchManager' in window;
+const swReady = BG
+  ? navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).catch(() => null)
+  : Promise.resolve(null);
+
+async function startBg(q) {
+  const reg = await swReady;
+  if (!reg || !reg.backgroundFetch) return false;
+  q.bgId = 'x' + Date.now() + Math.random().toString(36).slice(2, 6);
+  const c = await caches.open('xdown');
+  const meta = { user: q.t.user, id: q.t.id, url: q.url, file: q.file, mode: q.mode, thumb: q.thumb || '', fx: q.fx };
+  await c.put(`meta/${q.bgId}`, new Response(JSON.stringify(meta)));
+  try {
+    const bf = await reg.backgroundFetch.fetch(q.bgId, [new Request(q.url, { referrerPolicy: 'no-referrer' })], { title: q.file });
+    q.state = 'bg';
+    watchBg(q, bf);
+    return true;
+  } catch {
+    await c.delete(`meta/${q.bgId}`);
+    return false; // 안 되면 예전 방식(화면 켜 두고 받기)으로
+  }
+}
+
+function watchBg(q, bf) {
+  const st = q.st, bar = st.closest('li').querySelector('.bar i');
+  st.className = 'st'; st.textContent = '받는 중 (창 내려도 OK)';
+  bf.addEventListener('progress', () => {
+    if (bf.result) return; // 끝난 뒤 처리는 collectDone()
+    const got = bf.downloaded, total = bf.downloadTotal;
+    const pct = total ? Math.round(got / total * 100) : 0;
+    st.textContent = total ? `${pct}% (${(got / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)}MB)` : `${(got / 1048576).toFixed(1)}MB · 창 내려도 OK`;
+    if (total) bar.style.width = pct + '%';
+  });
+}
+
+// 페이지를 새로 열었을 때 목록 줄 다시 만들기
+function rowFromMeta(id, m) {
+  const st = addRow(`@${m.user}`);
+  const li = st.closest('li');
+  if (m.thumb) li.querySelector('.thumb').src = m.thumb;
+  const q = { t: { user: m.user, id: m.id }, st, url: m.url, file: m.file, mode: m.mode, thumb: m.thumb, fx: m.fx, bgId: id, state: 'bg' };
+  seen.add(m.id);
+  queue.push(q);
+  return q;
+}
+
+// 다 받은 것·실패한 것 꺼내서 마무리
+let collecting = false;
+async function collectDone() {
+  if (!BG || collecting) return;
+  collecting = true;
+  try {
+    const c = await caches.open('xdown');
+    for (const key of await c.keys()) {
+      const m = /\/(done|fail)\/([^/]+)$/.exec(key.url);
+      if (!m) continue;
+      const id = m[2], metaRes = await c.match(`meta/${id}`);
+      let q = queue.find(x => x.bgId === id);
+      if (!q && metaRes) q = rowFromMeta(id, await metaRes.json());
+      const res = await c.match(key);
+      await c.delete(key); await c.delete(`meta/${id}`);
+      if (!q) continue;
+      if (m[1] === 'fail') { fail(q, `실패 (${(await res.text()) || '연결 끊김'})`, q.url); continue; }
+      await finish(q, await res.blob());
+    }
+    // 아직 받는 중인 것도 다시 보이게
+    const reg = await swReady;
+    if (reg && reg.backgroundFetch) {
+      for (const id of await reg.backgroundFetch.getIds()) {
+        if (queue.some(x => x.bgId === id)) continue;
+        const metaRes = await c.match(`meta/${id}`);
+        const bf = await reg.backgroundFetch.get(id);
+        if (!metaRes || !bf) continue;
+        watchBg(rowFromMeta(id, await metaRes.json()), bf);
+      }
+    }
+  } catch {}
+  collecting = false;
+  summary();
+}
+if (BG) {
+  navigator.serviceWorker.addEventListener('message', collectDone);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) collectDone(); });
+  swReady.then(collectDone);
+}
+
 async function run() {
   if (running) return;
   running = true;
@@ -291,6 +379,34 @@ function retry(q) {
   summary(); run();
 }
 
+// 다 받은 영상: 안전 확인 → 휴대폰 저장 또는 드라이브 대기
+async function finish(q, blob) {
+  const st = q.st, bar = st.closest("li").querySelector(".bar i");
+  const block = why => {
+    q.state = 'bad'; st.className = 'st bad'; st.textContent = `⛔ 안전 확인 실패: ${why} (저장 안 함)`;
+    bar.style.width = '100%'; bar.style.background = 'var(--bad)';
+  };
+  const why = await safeFile(blob);
+  if (why) { block(why); return; }
+  if (q.mode === 'drive') {
+    // 휴대폰에 저장하지 않고 들고 있다가, 버튼을 누르면 드라이브로
+    q.blob = blob; q.state = 'ready';
+    bar.style.width = '100%'; bar.style.background = 'var(--ok)';
+    st.className = 'st ready'; st.innerHTML = '🛡️ 안전 확인됨<br><button>☁️ 드라이브로</button>';
+    st.querySelector('button').onclick = () => toDrive([q]);
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = q.file;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  bar.style.width = '100%'; bar.style.background = 'var(--ok)';
+  q.state = 'ok'; st.className = 'st ok'; st.textContent = '🛡️ 확인 · ✅ 저장';
+  saveHistory(q);
+  await new Promise(r => setTimeout(r, 800)); // 저장 사이 잠깐 쉬기
+}
+
 async function download(q) {
   const st = q.st;
   const bar0 = st.closest("li").querySelector(".bar i");
@@ -299,6 +415,7 @@ async function download(q) {
     bar0.style.width = '100%'; bar0.style.background = 'var(--bad)';
   };
   if (!safeUrl(q.url)) { block('X 공식 서버가 아니에요'); return; }
+  if (await startBg(q)) return; // 백그라운드로 넘김 → 다음 영상으로
   try {
     q.cut = false;
     // 전에 받다 끊긴 부분이 있으면 그 뒤부터만 요청 (Range)
@@ -324,25 +441,7 @@ async function download(q) {
     }
     const blob = new Blob(chunks, { type: 'video/mp4' });
     q.chunks = null; q.got = 0;
-    const why = await safeFile(blob);
-    if (why) { block(why); return; }
-    if (q.mode === 'drive') {
-      // 휴대폰에 저장하지 않고 들고 있다가, 버튼을 누르면 드라이브로
-      q.blob = blob; q.state = 'ready';
-      bar.style.width = '100%'; bar.style.background = 'var(--ok)';
-      st.className = 'st ready'; st.innerHTML = '🛡️ 안전 확인됨<br><button>☁️ 드라이브로</button>';
-      st.querySelector('button').onclick = () => toDrive([q]);
-      return;
-    }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = q.file;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-    bar.style.width = '100%'; bar.style.background = 'var(--ok)';
-    q.state = 'ok'; st.className = 'st ok'; st.textContent = '🛡️ 확인 · ✅ 저장';
-    saveHistory(q);
-    await new Promise(r => setTimeout(r, 800)); // 저장 사이 잠깐 쉬기
+    await finish(q, blob);
   } catch (e) {
     // 연결 끊김 + 창을 내렸던 경우 → 다시 열면 자동으로 이어 받기
     if (!/^\d{3}$/.test(String(e && e.message)) && (document.hidden || Date.now() - hiddenAt < 60000)) {
