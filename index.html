@@ -41,12 +41,19 @@
   .hist-head button { width:auto; margin:0; padding:6px 10px; font-size:13px; background:transparent; color:var(--sub); border:1px solid var(--line); }
   #hist .st a { font-size:13px; }
   #summary { font-size:14px; color:var(--sub); margin-bottom:6px; }
+  .seg { display:flex; gap:6px; margin-bottom:12px; }
+  .seg button { margin:0; padding:10px; font-size:15px; background:transparent; color:var(--sub); border:1px solid var(--line); }
+  .seg button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .st.ok button, .st.ready button { width:auto; margin:4px 0 0; padding:6px 10px; font-size:13px; background:var(--accent); color:#fff; }
+  .st.ready { color:var(--ok); text-align:right; }
+  #allDrive { margin:0 0 8px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>X 영상 받기 <span class="ver">v10 · 10/10</span></h1>
+  <h1>X 영상 받기 <span class="ver">v11 · 10/11</span></h1>
   <div class="card">
+    <div class="seg"><button id="modePhone">📱 휴대폰에 저장</button><button id="modeDrive">☁️ 구글 드라이브로</button></div>
     <textarea id="input" placeholder="x.com 링크를 붙여넣으세요 (여러 개면 줄을 바꿔서)"></textarea>
     <button class="primary" id="pasteBtn">📋 붙여넣기</button>
     <div class="hint">붙여넣으면 바로 받기 시작해요. 받는 중에도 다음 링크를 계속 붙여넣으세요.</div>
@@ -54,6 +61,7 @@
   </div>
   <div class="card" id="queueCard" hidden>
     <div id="summary"></div>
+    <button class="primary" id="allDrive" hidden></button>
     <ul id="list"></ul>
   </div>
   <div class="card" id="histCard" hidden>
@@ -109,8 +117,63 @@ function summary() {
   const bad = queue.filter(q => q.state === 'bad').length;
   const dup = queue.filter(q => q.state === 'dup').length;
   const left = queue.filter(q => q.state === 'find' || q.state === 'wait' || q.state === 'run').length;
-  $('summary').textContent = `완료 ${done} · 남음 ${left}` + (dup ? ` · 이미 받음 ${dup}` : '') + (bad ? ` · 실패 ${bad}` : '');
+  const ready = queue.filter(q => q.state === 'ready').length;
+  $('summary').textContent = `완료 ${done} · 남음 ${left}` + (ready ? ` · 드라이브 대기 ${ready}` : '') + (dup ? ` · 이미 받음 ${dup}` : '') + (bad ? ` · 실패 ${bad}` : '');
+  $('allDrive').hidden = ready < 2;
+  $('allDrive').textContent = `☁️ 확인된 영상 ${ready}개 모두 드라이브로`;
 }
+
+// 저장 방식: 휴대폰(다운로드 폴더) / 구글 드라이브(휴대폰엔 안 남김). 고른 방식은 기억해 둠
+const MKEY = 'xdown_mode';
+let mode = 'phone';
+try { mode = localStorage.getItem(MKEY) || 'phone'; } catch {}
+function setMode(m) {
+  mode = m;
+  try { localStorage.setItem(MKEY, m); } catch {}
+  $('modePhone').classList.toggle('on', m === 'phone');
+  $('modeDrive').classList.toggle('on', m === 'drive');
+}
+$('modePhone').onclick = () => setMode('phone');
+$('modeDrive').onclick = () => setMode('drive');
+setMode(mode);
+
+// 안전 확인 ①: X 공식 영상 서버 주소인지
+function safeUrl(url) {
+  try { const u = new URL(url); return u.protocol === 'https:' && u.hostname === 'video.twimg.com'; }
+  catch { return false; }
+}
+// 안전 확인 ②③: 진짜 mp4 영상인지(파일 앞부분 'ftyp' 표식) + 크기가 정상인지
+async function safeFile(blob) {
+  if (blob.size < 10 * 1024) return '파일이 너무 작아요';
+  if (blob.size > 1024 * 1048576) return '파일이 너무 커요';
+  const head = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+  const tag = String.fromCharCode(...head.slice(4, 8));
+  if (tag !== 'ftyp') return '영상 파일이 아니에요';
+  return '';
+}
+
+// 드라이브로 보내기: 휴대폰 공유 창을 띄워 '드라이브'를 고르게 함 (버튼을 눌러야 띄울 수 있음)
+async function toDrive(list) {
+  const files = list.map(q => new File([q.blob], q.file, { type: 'video/mp4' }));
+  if (!navigator.canShare || !navigator.canShare({ files })) {
+    $('msg').textContent = '이 브라우저는 공유 창을 못 띄워요. 위에서 「휴대폰에 저장」으로 바꿔 주세요.';
+    return;
+  }
+  try {
+    await navigator.share({ files });
+  } catch (e) {
+    if (e.name === 'AbortError') return; // 공유 창을 그냥 닫음 → 버튼 그대로 둠
+    $('msg').textContent = '공유 창을 띄우지 못했어요. 다시 눌러 주세요.';
+    return;
+  }
+  list.forEach(q => {
+    q.blob = null; // 메모리에서 지우기
+    q.state = 'ok'; q.st.className = 'st ok'; q.st.textContent = '☁️ 드라이브로 보냄';
+    saveHistory(q);
+  });
+  summary();
+}
+$('allDrive').onclick = () => toDrive(queue.filter(q => q.state === 'ready'));
 
 async function add() {
   const items = parseAll($('input').value);
@@ -177,9 +240,16 @@ async function expand(q, i) {
 
 async function download(q) {
   const st = q.st;
+  const bar0 = st.closest("li").querySelector(".bar i");
+  const block = why => {
+    q.state = 'bad'; st.className = 'st bad'; st.textContent = `⛔ 안전 확인 실패: ${why} (저장 안 함)`;
+    bar0.style.width = '100%'; bar0.style.background = 'var(--bad)';
+  };
+  if (!safeUrl(q.url)) { block('X 공식 서버가 아니에요'); return; }
   try {
     const res = await fetch(q.url, { referrerPolicy: 'no-referrer' });
     if (!res.ok) throw new Error(res.status);
+    if (!safeUrl(res.url)) { block('다른 서버로 넘어갔어요'); return; }
     const bar = st.closest("li").querySelector(".bar i");
     const total = +res.headers.get('content-length') || 0;
     const reader = res.body.getReader();
@@ -193,13 +263,23 @@ async function download(q) {
       if (total) bar.style.width = pct + "%";
     }
     const blob = new Blob(chunks, { type: 'video/mp4' });
+    const why = await safeFile(blob);
+    if (why) { block(why); return; }
+    if (mode === 'drive') {
+      // 휴대폰에 저장하지 않고 들고 있다가, 버튼을 누르면 드라이브로
+      q.blob = blob; q.state = 'ready';
+      bar.style.width = '100%'; bar.style.background = 'var(--ok)';
+      st.className = 'st ready'; st.innerHTML = '🛡️ 안전 확인됨<br><button>☁️ 드라이브로</button>';
+      st.querySelector('button').onclick = () => toDrive([q]);
+      return;
+    }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = q.file;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 60000);
     bar.style.width = '100%'; bar.style.background = 'var(--ok)';
-    q.state = 'ok'; st.className = 'st ok'; st.textContent = '✅ 저장';
+    q.state = 'ok'; st.className = 'st ok'; st.textContent = '🛡️ 확인 · ✅ 저장';
     saveHistory(q);
     await new Promise(r => setTimeout(r, 800)); // 저장 사이 잠깐 쉬기
   } catch {
