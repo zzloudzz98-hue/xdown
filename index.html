@@ -12,698 +12,83 @@
   @media (prefers-color-scheme: dark) {
     :root { --bg:#000; --card:#16181c; --text:#e7e9ea; --sub:#8b98a5; --line:#2f3336; }
   }
-  * { box-sizing: border-box; }
+  * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif; }
-  main { max-width:480px; margin:0 auto; padding:24px 16px; }
+  main { max-width:520px; margin:0 auto; padding:24px 16px 40px; }
   h1 { font-size:22px; margin:0 0 16px; display:flex; align-items:baseline; justify-content:space-between; }
   .ver { font-size:12px; font-weight:500; color:var(--sub); border:1px solid var(--line); border-radius:999px; padding:2px 8px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; }
   textarea { width:100%; min-height:72px; font-size:16px; padding:12px; border-radius:12px; border:1px solid var(--line); background:transparent; color:var(--text); resize:vertical; }
-  button { width:100%; font-size:17px; font-weight:600; padding:14px; border:0; border-radius:12px; margin-top:10px; cursor:pointer; }
+  button, .btn { display:block; width:100%; font-size:17px; font-weight:600; padding:14px; border:0; border-radius:12px; margin-top:10px; cursor:pointer; text-align:center; text-decoration:none; }
   .primary { background:var(--accent); color:#fff; }
   .ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
-  .hint { font-size:13px; color:var(--sub); margin-top:8px; }
-  #msg { margin-top:10px; font-size:14px; color:var(--sub); min-height:1em; }
-  #list, #hist { list-style:none; margin:0; padding:0; }
-  #list li, #hist li { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px; }
-  .thumb { width:64px; height:64px; flex-shrink:0; border-radius:8px; object-fit:cover; background:var(--line); }
-  .info { flex:1; min-width:0; }
-  .top { display:flex; justify-content:space-between; gap:8px; }
-  .bar { margin-top:8px; height:6px; background:var(--line); border-radius:3px; overflow:hidden; }
-  .bar i { display:block; height:100%; width:0; background:var(--accent); transition:width .2s; }
-  #list li:last-child, #hist li:last-child { border-bottom:0; }
-  .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .st { flex-shrink:0; color:var(--sub); }
-  .st.ok { color:var(--ok); } .st.bad { color:var(--bad); }
-  .st.dup { color:#f59e0b; text-align:right; }
-  .st.dup button { width:auto; margin:4px 0 0; padding:4px 8px; font-size:12px; background:transparent; color:var(--accent); border:1px solid var(--accent); }
-  .st a { color:var(--accent); }
-  .hist-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
-  .hist-head h2 { font-size:16px; margin:0; }
-  .hist-head button { width:auto; margin:0; padding:6px 10px; font-size:13px; background:transparent; color:var(--sub); border:1px solid var(--line); }
-  #hist .st a { font-size:13px; }
-  #summary { font-size:14px; color:var(--sub); margin-bottom:6px; }
-  .seg { display:flex; gap:8px; }
-  .seg button { margin-top:10px; padding:16px 8px; font-size:16px; background:transparent; color:var(--accent); border:1px solid var(--accent); }
-  .seg button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
-  .st.ok button, .st.ready button, .st.bad button { width:auto; margin:4px 0 0; padding:6px 10px; font-size:13px; background:var(--accent); color:#fff; }
-  .st.ready { color:var(--ok); text-align:right; }
-  #allDrive { margin:0 0 8px; }
+  .hint { font-size:13px; color:var(--sub); margin-top:10px; line-height:1.5; }
+  #msg { margin-top:12px; font-size:15px; min-height:1em; line-height:1.5; }
+  #msg.bad { color:var(--bad); }
+  #msg.ok { color:var(--ok); }
 </style>
 </head>
 <body>
 <main>
-  <h1>X 영상 받기 <span class="ver">v22 · 10/13</span></h1>
+  <h1>X 영상 받기 <span class="ver">v23 · 드라이브로 바로</span></h1>
   <div class="card">
-    <textarea id="input" placeholder="x.com 링크를 붙여넣으세요 (여러 개면 줄을 바꿔서)"></textarea>
-    <div class="seg"><button id="modePhone">📱 휴대폰에 저장</button><button id="modeDrive">☁️ 구글 드라이브로</button></div>
-    <div class="hint">X 링크를 복사한 뒤 원하는 버튼을 누르면 바로 받기 시작해요. 입력칸에 직접 붙여넣으면 파란색으로 표시된 방식으로 받아요.<br>받는 중에 창을 내리거나 다른 앱으로 넘어가도 계속 받아요(알림창에 진행 표시). 다 받으면 알림을 누르거나 이 페이지로 돌아오면 저장돼요.</div>
+    <button class="primary" id="pasteBtn">📋 복사한 링크 붙여넣고 드라이브에 저장</button>
+    <textarea id="input" placeholder="또는 여기에 X·인스타 링크를 붙여 넣기"></textarea>
+    <button class="ghost" id="sendBtn">☁️ 드라이브에 저장</button>
     <div id="msg"></div>
-  </div>
-  <div class="card" id="queueCard">
-    <div id="summary">아직 받는 영상이 없어요. 링크를 복사하고 위 버튼을 눌러 주세요.</div>
-    <button class="primary" id="allDrive" hidden></button>
-    <ul id="list"></ul>
-  </div>
-  <div class="card" id="histCard">
-    <div class="hist-head"><h2>받은 내역</h2><button id="clearBtn">내역 지우기</button></div>
-    <ul id="hist" class="list"></ul>
+    <div class="hint">링크를 보내면 <b>맥북이 받아서 구글 드라이브에 저장</b>해요. 휴대폰에는 받지 않아요.<br>
+      X → 「X영상」 폴더, 인스타 → 「개인/인스타저장」 폴더<br>
+      X·인스타 앱에서 「공유」 → 「X 영상 받기」를 눌러도 바로 저장돼요.</div>
+    <a class="btn ghost" id="listBtn" href="#" hidden>📂 저장한 목록 보기 (인스타 저장 페이지)</a>
   </div>
 </main>
 <script>
+// v23 (2026-11-26): 휴대폰 받기 없앰 → 링크를 맥북 저장 도구(인스타 저장, 구글 앱스 스크립트)로 넘겨 맥북이 드라이브에 저장
+// 저장 도구 주소는 공개 코드에 적지 않고, 「인스타 저장」 페이지의 연결 버튼(#ig=…)을 한 번 열면 이 브라우저에 기억함
 const $ = id => document.getElementById(id);
-const queue = [];      // 받을 영상 목록
-const seen = new Set(); // 이미 넣은 글 번호 (같은 링크 두 번 방지)
-let running = false;
+const EKEY = 'igsave_exec';
+const LINK_RE = /https?:\/\/(?:www\.|mobile\.)?(?:instagram|x|twitter|fixupx|fxtwitter|vxtwitter)\.com\/[^\s]+/i;
 
-// 붙여넣은 글에서 x.com 링크를 모두 찾기
-function parseAll(text) {
-  const re = /(?:x|twitter|fixupx|fxtwitter|vxtwitter)\.com\/([^\/\s?]+)\/status\/(\d+)/gi;
-  const out = []; let m;
-  while ((m = re.exec(text))) out.push({ user: m[1], id: m[2] });
-  return out;
-}
-
-// 저장 파일 이름: X 글 내용(앞 40자) + 받는 날짜. 예) 고양이가 점프함_2026-10-09.mp4
-function fileBase(tweet, t) {
-  let title = ((tweet && tweet.text) || '')
-    .replace(/https?:\/\/\S+/g, '')          // 링크 빼기
-    .replace(/[\\/:*?"<>|#%]+/g, ' ')  // 파일 이름에 못 쓰는 글자 빼기
-    .replace(/\s+/g, ' ').trim();
-  if (!title) title = `@${t.user}`;
-  title = Array.from(title).slice(0, 40).join('').trim();
-  const d = new Date();
-  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  return `${title}_${day}`;
-}
-
-// mp4 중 화질 가장 좋은 것 고르기
-function bestMp4(v) {
-  const list = (v.variants || []).filter(x => (x.content_type || '').includes('mp4') || /\.mp4/.test(x.url));
-  if (list.length) return list.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0].url;
-  return v.url;
-}
-
-function addRow(label) {
-  $('queueCard').hidden = false;
-  const li = document.createElement('li');
-  li.innerHTML = `<img class="thumb" alt=""><div class="info"><div class="top"><span class="name"></span><span class="st">대기</span></div><div class="bar"><i></i></div></div>`;
-  li.querySelector('.name').textContent = label;
-  $('list').appendChild(li);
-  return li.querySelector('.st');
-}
-
-function summary() {
-  const done = queue.filter(q => q.state === 'ok').length;
-  const bad = queue.filter(q => q.state === 'bad').length;
-  const dup = queue.filter(q => q.state === 'dup').length;
-  const left = queue.filter(q => q.state === 'find' || q.state === 'wait' || q.state === 'run' || q.state === 'bg' || q.state === 'up').length;
-  const ready = queue.filter(q => q.state === 'ready').length;
-  $('summary').textContent = `완료 ${done} · 남음 ${left}` + (ready ? ` · 드라이브 대기 ${ready}` : '') + (dup ? ` · 이미 받음 ${dup}` : '') + (bad ? ` · 실패 ${bad}` : '');
-  $('allDrive').hidden = ready < 2;
-  saveQueue();
-  $('allDrive').textContent = `☁️ 확인된 영상 ${ready}개 모두 드라이브로`;
-}
-
-// 저장 방식: 휴대폰(다운로드 폴더) / 구글 드라이브(휴대폰엔 안 남김). 고른 방식은 기억해 둠
-const MKEY = 'xdown_mode';
-let mode = 'phone';
-try { mode = localStorage.getItem(MKEY) || 'phone'; } catch {}
-function setMode(m) {
-  mode = m;
-  try { localStorage.setItem(MKEY, m); } catch {}
-  $('modePhone').classList.toggle('on', m === 'phone');
-  $('modeDrive').classList.toggle('on', m === 'drive');
-}
-// 버튼 = 방식 고르기 + 복사한 링크 붙여넣기를 한 번에
-async function pasteGo(m) {
-  setMode(m);
-  try { $('input').value = await navigator.clipboard.readText(); add(); }
-  catch { $('msg').textContent = '붙여넣기 권한이 없어요. 입력칸을 길게 눌러 직접 붙여넣어 주세요.'; }
-}
-$('modePhone').onclick = () => pasteGo('phone');
-$('modeDrive').onclick = () => pasteGo('drive');
-setMode(mode);
-
-// 안전 확인 ①: X 공식 영상 서버 주소인지
-function safeUrl(url) {
-  try { const u = new URL(url); return u.protocol === 'https:' && u.hostname === 'video.twimg.com'; }
-  catch { return false; }
-}
-// 안전 확인 ②③: 진짜 mp4 영상인지(파일 앞부분 'ftyp' 표식) + 크기가 정상인지
-async function safeFile(blob) {
-  if (blob.size < 10 * 1024) return '파일이 너무 작아요';
-  if (blob.size > 1024 * 1048576) return '파일이 너무 커요';
-  const head = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
-  const tag = String.fromCharCode(...head.slice(4, 8));
-  if (tag !== 'ftyp') return '영상 파일이 아니에요';
-  return '';
-}
-
-// 드라이브로 보내기: 휴대폰 공유 창을 띄워 '드라이브'를 고르게 함 (버튼을 눌러야 띄울 수 있음)
-async function toDrive(list) {
-  const files = list.map(q => new File([q.blob], q.file, { type: 'video/mp4' }));
-  if (!navigator.canShare || !navigator.canShare({ files })) {
-    $('msg').textContent = '이 브라우저는 공유 창을 못 띄워요. 위에서 「휴대폰에 저장」으로 바꿔 주세요.';
-    return;
-  }
-  try {
-    await navigator.share({ files });
-  } catch (e) {
-    if (e.name === 'AbortError') return; // 공유 창을 그냥 닫음 → 버튼 그대로 둠
-    $('msg').textContent = '공유 창을 띄우지 못했어요. 다시 눌러 주세요.';
-    return;
-  }
-  list.forEach(q => {
-    q.blob = null; // 메모리에서 지우기
-    caches.open('xdown').then(c => c.delete(`ready/${mediaKey(q.url)}`)).catch(() => {});
-    q.state = 'ok'; q.st.className = 'st ok'; q.st.textContent = '☁️ 드라이브로 보냄';
-    saveHistory(q);
-  });
-  summary();
-}
-$('allDrive').onclick = () => toDrive(queue.filter(q => q.state === 'ready'));
-
-async function add() {
-  const items = parseAll($('input').value);
-  $('input').value = '';
-  if (!items.length) { $('msg').textContent = 'x.com 링크를 못 찾았어요. 다시 확인해 주세요.'; return; }
-  let added = 0, again = 0;
-  for (const t of items) {
-    if (seen.has(t.id)) {
-      // 실패했던 링크를 다시 넣으면 다시 받기
-      const failed = queue.filter(q => q.t.id === t.id && q.state === 'bad');
-      failed.forEach(q => { q.mode = mode; retry(q); });
-      again += failed.length;
-      if (!failed.length) {
-        // 목록에서 빠진 영상이 있을 수 있음 → 글을 다시 읽어서 없는 것만 채우기
-        const st = addRow(`@${t.user} · 빠진 영상 찾는 중…`);
-        queue.push({ t, st, state: 'find', mode, refill: true });
-        again++;
-      }
-      continue;
-    }
-    seen.add(t.id); added++;
-    const st = addRow(`@${t.user} · 영상 찾는 중…`);
-    queue.push({ t, st, state: 'find', mode });
-  }
-  $('msg').textContent = added ? `${added}개 추가했어요.` : again ? '목록에 없는 영상이 있는지 다시 확인해요.' : '이미 목록에 있는 링크예요.';
-  summary();
-  run();
-}
-
-// 하나씩 순서대로 처리 (동시에 받으면 폰에서 막히거나 메모리가 부족해질 수 있음)
-// 받는 동안 화면이 저절로 꺼지지 않게 (창을 내리면 풀림 → 다시 열면 다시 켬)
-let lock = null;
-async function keepAwake(on) {
-  try {
-    if (on && !lock && navigator.wakeLock && !document.hidden) { lock = await navigator.wakeLock.request('screen'); lock.onrelease = () => { lock = null; }; }
-    if (!on && lock) { await lock.release(); lock = null; }
-  } catch {}
-}
-// 창을 내리면 휴대폰이 인터넷 연결을 끊음 → 다시 열었을 때 끊긴 영상을 이어서 받기
-let hiddenAt = 0;
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { hiddenAt = Date.now(); return; }
-  if (running) keepAwake(true);
-  const cut = queue.filter(q => q.state === 'bad' && q.cut);
-  if (cut.length) { $('msg').textContent = `멈췄던 영상 ${cut.length}개를 이어서 받아요.`; cut.forEach(retry); }
-});
-
-// ── 백그라운드 받기: 창을 내리거나 다른 앱으로 가도 휴대폰이 대신 받아 줌 (Chrome·삼성 인터넷) ──
-// 받는 일은 sw.js(페이지 뒤에서 도는 작은 도우미)가 맡고, 다 받은 파일은 잠깐 보관함(cache)에 넣어 둠
-const BG = 'serviceWorker' in navigator && 'BackgroundFetchManager' in window;
-const swReady = BG
-  ? navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).catch(() => null)
-  : Promise.resolve(null);
-
-async function startBg(q) {
-  if (q.noBg || noBg()) return false;
-  const reg = await swReady;
-  if (!reg || !reg.backgroundFetch) return false;
-  q.bgId = 'x' + Date.now() + Math.random().toString(36).slice(2, 6);
-  const c = await caches.open('xdown');
-  const meta = { user: q.t.user, id: q.t.id, url: q.url, file: q.file, mode: q.mode, thumb: q.thumb || '', fx: q.fx };
-  await c.put(`meta/${q.bgId}`, new Response(JSON.stringify(meta)));
-  try {
-    const bf = await reg.backgroundFetch.fetch(q.bgId, [new Request(q.url, { referrerPolicy: 'no-referrer' })], { title: q.file });
-    q.state = 'bg';
-    watchBg(q, bf);
-    return true;
-  } catch {
-    await c.delete(`meta/${q.bgId}`);
-    return false; // 안 되면 예전 방식(화면 켜 두고 받기)으로
-  }
-}
-
-// 백그라운드 받기가 시작은 되는데 실제로는 안 받아지는 브라우저가 있음 → 기억해 두고 다음부턴 바로 예전 방식
-const NOBG = 'xdown_nobg';
-function noBg() { try { return localStorage.getItem(NOBG) === '1'; } catch { return false; } }
-
-function watchBg(q, bf) {
-  q.watched = true;
-  const st = q.st, bar = st.closest('li').querySelector('.bar i');
-  st.className = 'st'; st.textContent = '받는 중 (창 내려도 OK)';
-  // 화면을 켜 둔 채 12초가 지나도 1바이트도 안 받아지면 → 예전 방식(화면 켜 두고 받기)으로 바꿈
-  let waited = 0;
-  const timer = setInterval(async () => {
-    if (bf.result || bf.downloaded > 0 || q.state !== 'bg') { clearInterval(timer); return; }
-    if (document.hidden) return;
-    if ((waited += 1) < 12) return;
-    clearInterval(timer);
-    try { localStorage.setItem(NOBG, '1'); } catch {}
-    const id = q.bgId; q.bgId = null; q.noBg = true;
-    try { await (await caches.open('xdown')).delete(`meta/${id}`); } catch {}
-    try { await bf.abort(); } catch {}
-    $('msg').textContent = '이 브라우저는 창을 내리면 받기가 멈춰요. 받는 동안 화면을 켜 두세요. (Chrome 앱에선 창 내려도 받아져요)';
-    q.state = 'wait'; st.textContent = '대기'; summary(); run();
-  }, 1000);
-  bf.addEventListener('progress', () => {
-    if (bf.result) return; // 끝난 뒤 처리는 collectDone()
-    const got = bf.downloaded, total = bf.downloadTotal;
-    const pct = total ? Math.round(got / total * 100) : 0;
-    st.textContent = total ? `${pct}% (${(got / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)}MB)` : `${(got / 1048576).toFixed(1)}MB · 창 내려도 OK`;
-    if (total) bar.style.width = pct + '%';
-  });
-}
-
-// 페이지를 새로 열었을 때 목록 줄 다시 만들기
-function rowFromMeta(id, m) {
-  const st = addRow(`@${m.user}`);
-  const li = st.closest('li');
-  if (m.thumb) li.querySelector('.thumb').src = m.thumb;
-  const q = { t: { user: m.user, id: m.id }, st, url: m.url, file: m.file, mode: m.mode, thumb: m.thumb, fx: m.fx, bgId: id, state: 'bg' };
-  seen.add(m.id);
-  queue.push(q);
-  return q;
-}
-
-// 다 받은 것·실패한 것 꺼내서 마무리
-let collecting = false;
-async function collectDone() {
-  if (!BG || collecting) return;
-  collecting = true;
-  try {
-    const c = await caches.open('xdown');
-    for (const key of await c.keys()) {
-      const m = /\/(done|fail)\/([^/]+)$/.exec(key.url);
-      if (!m) continue;
-      const id = m[2], metaRes = await c.match(`meta/${id}`);
-      let q = queue.find(x => x.bgId === id);
-      if (!q && metaRes) q = rowFromMeta(id, await metaRes.json());
-      const res = await c.match(key);
-      await c.delete(key); await c.delete(`meta/${id}`);
-      if (!q) continue;
-      if (m[1] === 'fail') { fail(q, `실패 (${(await res.text()) || '연결 끊김'})`, q.url); continue; }
-      await finish(q, await res.blob());
-    }
-    // 아직 받는 중인 것도 다시 보이게
-    const reg = await swReady;
-    if (reg && reg.backgroundFetch) {
-      const ids = await reg.backgroundFetch.getIds();
-      for (const id of ids) {
-        const bf = await reg.backgroundFetch.get(id);
-        if (!bf) continue;
-        const q = queue.find(x => x.bgId === id);
-        if (q) { if (!q.watched && q.state === 'bg') watchBg(q, bf); continue; }
-        const metaRes = await c.match(`meta/${id}`);
-        if (!metaRes) continue;
-        watchBg(rowFromMeta(id, await metaRes.json()), bf);
-      }
-      // 기억해 둔 '백그라운드 받는 중'인데 휴대폰에선 이미 사라진 것 → 다시 받기
-      queue.filter(x => x.state === 'bg' && !x.watched && !ids.includes(x.bgId)).forEach(x => {
-        x.bgId = null; x.state = 'wait'; x.st.textContent = '대기';
-      });
-      run();
-    }
-  } catch {}
-  collecting = false;
-  summary();
-}
-if (BG) {
-  navigator.serviceWorker.addEventListener('message', collectDone);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) collectDone(); });
-  swReady.then(collectDone);
-}
-
-async function run() {
-  if (running) return;
-  running = true;
-  keepAwake(true);
-  for (let i = 0; i < queue.length; i++) {
-    const q = queue[i];
-    if (q.state === 'find') { await expand(q, i); summary(); }
-    if (q.state === 'wait') { q.state = 'run'; summary(); await download(q); summary(); }
-  }
-  running = false;
-  if (queue.some(q => q.state === 'find' || q.state === 'wait')) run();
-  else keepAwake(false);
-}
-
-// 글 하나에 영상이 여러 개면 각각 목록에 펼치기
-async function expand(q, i) {
-  const { t, st } = q;
-  const fx = `https://d.fixupx.com/${t.user}/status/${t.id}`;
-  st.closest("li").querySelector('.name').textContent = `@${t.user}`;
-  try {
-    const d = await (await fetch(`https://api.fxtwitter.com/status/${t.id}`)).json();
-    const vids = (d.tweet && d.tweet.media && d.tweet.media.videos) || [];
-    if (!vids.length) { fail(q, '영상 없음', fx); return; }
-    const n = vids.length, base = fileBase(d.tweet, t);
-    // 받을 영상 목록 (다시 채우기면 이미 목록에 있는 영상은 빼기)
-    let todo = vids.map((v, k) => ({ v, k, url: bestMp4(v) }));
-    if (q.refill) {
-      const have = new Set(queue.filter(x => x !== q && x.url && x.state !== 'gone').map(x => mediaKey(x.url)));
-      todo = todo.filter(x => !have.has(mediaKey(x.url)));
-      if (!todo.length) {
-        q.state = 'gone'; st.closest('li').remove();
-        $('msg').textContent = '이 글의 영상은 모두 목록에 있어요.';
-        return;
-      }
-    }
-    const label = k => `@${t.user}` + (n > 1 ? ` · 영상 ${k + 1}/${n}` : '');
-    const fileOf = k => n > 1 ? `${base}_${k + 1}.mp4` : `${base}.mp4`;
-    const first = todo[0];
-    st.closest("li").querySelector('.name').textContent = label(first.k);
-    if (first.v.thumbnail_url) st.closest("li").querySelector('.thumb').src = first.v.thumbnail_url;
-    q.thumb = first.v.thumbnail_url;
-    q.url = first.url; q.file = fileOf(first.k); q.fx = fx; q.state = 'wait'; q.refill = false;
-    checkDup(q);
-    // 나머지 영상은 바로 아래 줄에 차례로 끼워 넣기
-    let after = st.closest("li");
-    const extra = todo.slice(1).map(({ v, k, url }) => {
-      const li = document.createElement('li');
-      li.innerHTML = `<img class="thumb" alt=""><div class="info"><div class="top"><span class="name"></span><span class="st">대기</span></div><div class="bar"><i></i></div></div>`;
-      li.querySelector('.name').textContent = label(k);
-      if (v.thumbnail_url) li.querySelector('.thumb').src = v.thumbnail_url;
-      after.after(li); after = li;
-      const e = { t, st: li.querySelector('.st'), thumb: v.thumbnail_url, url, file: fileOf(k), fx, state: 'wait', mode: q.mode };
-      checkDup(e);
-      return e;
-    });
-    queue.splice(i + 1, 0, ...extra);
-  } catch {
-    fail(q, '정보 못 가져옴', fx);
-  }
-}
-
-// 실패 이유를 짧게: 403(막힘)·404(없음)·연결 끊김 등
-function reason(e) {
-  const m = String((e && e.message) || '');
-  if (/^\d{3}$/.test(m)) return m === '403' ? ' (X가 막음 403)' : m === '404' ? ' (영상 없음 404)' : ` (${m})`;
-  return ' (연결 끊김)';
-}
-function fail(q, text, link) {
-  q.state = 'bad'; q.blob = null;
-  const st = q.st, b = st.closest('li').querySelector('.bar i');
-  b.style.width = '100%'; b.style.background = 'var(--bad)';
-  st.className = 'st bad';
-  st.innerHTML = `${text} <a target="_blank">열기</a><br><button>다시 받기</button>`;
-  st.querySelector('a').href = link;
-  st.querySelector('button').onclick = () => retry(q);
-  summary();
-}
-function retry(q) {
-  q.state = q.url ? 'wait' : 'find';
-  q.st.className = 'st'; q.st.textContent = q.got ? `이어 받기 대기 (${(q.got / 1048576).toFixed(1)}MB 받음)` : '대기';
-  const b = q.st.closest('li').querySelector('.bar i'); b.style.width = '0'; b.style.background = 'var(--accent)';
-  summary(); run();
-}
-
-// 드라이브 자동 올리기: 내 앱스 스크립트가 만들어 준 '올리기 주소'로 휴대폰에서 바로 올림
-async function autoDrive(q, blob) {
-  const s = syncInfo(), st = q.st, bar = st.closest('li').querySelector('.bar i');
-  q.state = 'up'; q.blob = blob; summary();
-  st.className = 'st'; st.textContent = '☁️ 드라이브에 올리는 중…';
-  bar.style.background = 'var(--accent)'; bar.style.width = '0';
-  try {
-    const d = await (await fetch(s.url, { method: 'POST', headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ k: s.k, upload: { name: q.file, size: blob.size }, origin: location.origin }) })).json();
-    if (!d.ok || !d.url) throw new Error('no url');
-    await new Promise((ok, no) => {
-      const x = new XMLHttpRequest();
-      x.open('PUT', d.url);
-      x.upload.onprogress = e => {
-        if (!e.lengthComputable) return;
-        const pct = Math.round(e.loaded / e.total * 100);
-        bar.style.width = pct + '%'; st.textContent = `☁️ 드라이브에 올리는 중 ${pct}%`;
-      };
-      x.onload = () => (x.status === 200 || x.status === 201 ? ok() : no());
-      x.onerror = no;
-      x.send(blob);
-    });
-    q.blob = null; q.state = 'ok';
-    bar.style.width = '100%'; bar.style.background = 'var(--ok)';
-    st.className = 'st ok'; st.textContent = '☁️ 드라이브에 저장됨';
-    caches.open('xdown').then(c => c.delete(`ready/${mediaKey(q.url)}`)).catch(() => {});
-    saveHistory(q);
-    summary();
-  } catch {
-    showReady(q, blob); // 자동이 안 되면 버튼으로 (창을 내려 끊긴 경우 다시 열면 자동 재시도)
-  }
-}
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden || !syncInfo()) return;
-  queue.filter(q => q.state === 'ready' && q.blob).forEach(q => autoDrive(q, q.blob));
-});
-
-// 드라이브로 보낼 준비 끝난 줄
-function showReady(q, blob) {
-  const st = q.st, bar = st.closest('li').querySelector('.bar i');
-  q.blob = blob; q.state = 'ready';
-  bar.style.width = '100%'; bar.style.background = 'var(--ok)';
-  st.className = 'st ready'; st.innerHTML = '🛡️ 안전 확인됨<br><button>☁️ 드라이브로</button>';
-  st.querySelector('button').onclick = () => toDrive([q]);
-  summary();
-}
-// 다 받은 영상: 안전 확인 → 휴대폰 저장 또는 드라이브 대기
-async function finish(q, blob) {
-  const st = q.st, bar = st.closest("li").querySelector(".bar i");
-  const block = why => {
-    q.state = 'bad'; st.className = 'st bad'; st.textContent = `⛔ 안전 확인 실패: ${why} (저장 안 함)`;
-    bar.style.width = '100%'; bar.style.background = 'var(--bad)';
-  };
-  const why = await safeFile(blob);
-  if (why) { block(why); return; }
-  if (q.mode === 'drive') {
-    // 휴대폰에 저장하지 않고 들고 있다가, 버튼을 누르면 드라이브로
-    // 페이지가 새로 불려도 다시 안 받게 보관함에도 넣어 둠
-    try { await (await caches.open('xdown')).put(`ready/${mediaKey(q.url)}`, new Response(blob)); } catch {}
-    if (syncInfo()) autoDrive(q, blob); // 동기화 연결된 기기면 버튼 없이 바로 드라이브로
-    else showReady(q, blob);
-    return;
-  }
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = q.file;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-  bar.style.width = '100%'; bar.style.background = 'var(--ok)';
-  q.state = 'ok'; st.className = 'st ok'; st.textContent = '🛡️ 확인 · ✅ 저장';
-  saveHistory(q);
-  await new Promise(r => setTimeout(r, 800)); // 저장 사이 잠깐 쉬기
-}
-
-async function download(q) {
-  const st = q.st;
-  const bar0 = st.closest("li").querySelector(".bar i");
-  const block = why => {
-    q.state = 'bad'; st.className = 'st bad'; st.textContent = `⛔ 안전 확인 실패: ${why} (저장 안 함)`;
-    bar0.style.width = '100%'; bar0.style.background = 'var(--bad)';
-  };
-  if (!safeUrl(q.url)) { block('X 공식 서버가 아니에요'); return; }
-  if (await startBg(q)) return; // 백그라운드로 넘김 → 다음 영상으로
-  try {
-    q.cut = false;
-    // 전에 받다 끊긴 부분이 있으면 그 뒤부터만 요청 (Range)
-    if (!q.chunks) { q.chunks = []; q.got = 0; }
-    const headers = q.got && !q.noRange ? { Range: `bytes=${q.got}-` } : {};
-    const res = await fetch(q.url, { referrerPolicy: 'no-referrer', headers });
-    if (!res.ok) throw new Error(res.status);
-    if (!safeUrl(res.url)) { block('다른 서버로 넘어갔어요'); return; }
-    if (res.status !== 206) { q.chunks = []; q.got = 0; } // 이어 받기를 못 하면 처음부터
-    const bar = st.closest("li").querySelector(".bar i");
-    const cr = /\/(\d+)$/.exec(res.headers.get('content-range') || '');
-    const total = cr ? +cr[1] : (+res.headers.get('content-length') || 0);
-    const reader = res.body.getReader();
-    const chunks = q.chunks;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value); q.got += value.length;
-      const got = q.got;
-      const pct = total ? Math.round(got / total * 100) : 0;
-      st.textContent = total ? `${pct}% (${(got / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)}MB)` : `${(got / 1048576).toFixed(1)}MB`;
-      if (total) bar.style.width = pct + "%";
-    }
-    const blob = new Blob(chunks, { type: 'video/mp4' });
-    q.chunks = null; q.got = 0;
-    await finish(q, blob);
-  } catch (e) {
-    // 연결 끊김 + 창을 내렸던 경우 → 다시 열면 자동으로 이어 받기
-    if (!/^\d{3}$/.test(String(e && e.message)) && (document.hidden || Date.now() - hiddenAt < 60000)) {
-      q.cut = true;
-      fail(q, '⏸️ 창을 내려서 멈춤 · 다시 열면 이어 받아요', q.url);
-      return;
-    }
-    // 이어 받기 요청을 브라우저·서버가 거절했을 수 있음 → 이어 받기 끄고 처음부터 한 번 더
-    if (q.got && !q.noRange) { q.noRange = true; q.chunks = null; q.got = 0; retry(q); return; }
-    fail(q, '실패' + reason(e), q.url);
-  }
-}
-
-// 받은 내역: 이 폰의 브라우저에만 저장 (최근 100개)
-const HKEY = 'xdown_history';
-function loadHistory() { try { return JSON.parse(localStorage.getItem(HKEY)) || []; } catch { return []; } }
-function saveHistory(q) {
-  const h = loadHistory();
-  const e = { user: q.t.user, id: q.t.id, media: mediaKey(q.url), file: q.file, thumb: q.thumb || '', fx: q.fx, at: Date.now() };
-  h.unshift(e);
-  try { localStorage.setItem(HKEY, JSON.stringify(h.slice(0, 1000))); } catch {}
-  renderHistory();
-  pushSync([e]);
-}
-// 영상 고유번호: 영상 주소 속 번호(.../ext_tw_video/1234/...). 다른 사람이 퍼 간 글이어도 같은 영상이면 번호가 같음
-function mediaKey(url) {
-  const m = /_video\/(\d+)/.exec(url || '');
-  return m ? m[1] : (url || '').split('?')[0];
-}
-// 예전에 받은 영상인지 확인 → 맞으면 받지 않고 "이미 받음" 표시 + 다시 받기 버튼
-function checkDup(q) {
-  const key = mediaKey(q.url);
-  const x = loadHistory().find(h => h.media ? h.media === key
-    : (h.fx || '').endsWith(`/status/${q.t.id}`)); // 예전 내역(번호 저장 전)은 글 주소로 비교
-  if (!x) return;
-  const d = new Date(x.at);
-  const when = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  const other = x.id && x.id !== q.t.id ? ` (@${x.user} 글)` : '';
-  q.state = 'dup';
-  q.st.className = 'st dup';
-  q.st.innerHTML = `⚠️ 이미 받음 ${when}${other}<br><button>다시 받기</button>`;
-  q.st.querySelector('button').onclick = () => {
-    q.state = 'wait'; q.st.className = 'st'; q.st.textContent = '대기';
-    summary(); run();
-  };
-}
-
-function renderHistory() {
-  const h = loadHistory();
-  $('clearBtn').hidden = !h.length;
-  $('hist').innerHTML = h.length ? '' : '<li class="hint">아직 받은 영상이 없어요.</li>';
-  h.slice(0, 50).forEach(x => {
-    const li = document.createElement('li');
-    const d = new Date(x.at);
-    li.innerHTML = `<img class="thumb" alt=""><div class="info"><div class="top"><span class="name"></span><span class="st"><a target="_blank">원본</a></span></div><div class="hint"></div></div>`;
-    if (x.thumb) li.querySelector('.thumb').src = x.thumb;
-    li.querySelector('.name').textContent = `@${x.user}`;
-    li.querySelector('a').href = x.fx;
-    li.querySelector('.hint').textContent = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} · ${x.file}`;
-    $('hist').appendChild(li);
-  });
-}
-$('clearBtn').onclick = () => {
-  const s = syncInfo();
-  if (!confirm(s ? '받은 내역을 지울까요? 연결된 다른 기기의 내역도 함께 지워져요. (받은 영상 파일은 그대로 남아요)'
-                 : '받은 내역을 지울까요? (받은 영상 파일은 그대로 남아요)')) return;
-  try { localStorage.removeItem(HKEY); } catch {}
-  if (s) fetch(s.url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ k: s.k, clear: true }) }).catch(() => {});
-  renderHistory();
-};
-renderHistory();
-
-// ── 받은 내역 동기화: 같은 구글 계정(앱스 스크립트)에 모아 두고 모든 기기가 같이 봄 ──
-// 기기마다 '연결 링크'(주소 뒤 #s=…)를 한 번 열면 이 브라우저에 기억됨
-const SKEY = 'xdown_sync';
-function syncInfo() { try { return JSON.parse(localStorage.getItem(SKEY)); } catch { return null; } }
-(function () {
-  const m = /[#&]s=([^&]+)/.exec(location.hash);
+(function setup() {
+  const m = /[#&]ig=([^&]+)/.exec(location.hash);
   if (!m) return;
   try {
-    const [url, k] = atob(decodeURIComponent(m[1])).split('|');
-    if (/^https:\/\/script\.google\.com\//.test(url) && k) {
-      localStorage.setItem(SKEY, JSON.stringify({ url, k }));
-      $('msg').textContent = '✅ 이 기기를 받은 내역 동기화에 연결했어요.';
+    const url = atob(decodeURIComponent(m[1]));
+    if (/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(url)) {
+      localStorage.setItem(EKEY, url);
+      say('✅ 이 휴대폰을 맥북 저장 도구에 연결했어요. 이제 링크를 보내면 드라이브에 저장돼요.', 'ok');
     }
   } catch {}
-  history.replaceState(null, '', location.pathname + location.search); // 주소창에서 비밀번호 지우기
+  history.replaceState(null, '', location.pathname + location.search);
 })();
-function pushSync(list) {
-  const s = syncInfo();
-  if (!s || !list.length) return;
-  fetch(s.url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ k: s.k, add: list }) }).catch(() => {});
-}
-let pulling = false;
-async function pullSync() {
-  const s = syncInfo();
-  if (!s || pulling) return;
-  pulling = true;
-  try {
-    const d = await (await fetch(`${s.url}?k=${encodeURIComponent(s.k)}`)).json();
-    if (d.ok) {
-      const key = x => x.media || x.id;
-      const h = loadHistory(), mine = new Set(h.map(key)), remote = new Set(d.list.map(key));
-      const add = d.list.filter(x => !mine.has(key(x)));
-      if (add.length) {
-        const all = h.concat(add).sort((a, b) => (b.at || 0) - (a.at || 0));
-        try { localStorage.setItem(HKEY, JSON.stringify(all.slice(0, 1000))); } catch {}
-        renderHistory();
-        // 목록에 있는데 다른 기기에서 이미 받은 영상이면 '이미 받음'으로
-        queue.filter(q => q.state === 'wait' && q.url).forEach(checkDup);
-        summary();
-      }
-      pushSync(h.filter(x => !remote.has(key(x)))); // 이 기기에만 있던 내역은 올리기
-    }
-  } catch {}
-  pulling = false;
-}
-pullSync();
-document.addEventListener('visibilitychange', () => { if (!document.hidden) pullSync(); });
 
-const QKEY = 'xdown_queue';
-function saveQueue() {
-  const keep = queue.filter(q => !['ok', 'dup', 'gone'].includes(q.state)).map(q => ({
-    t: q.t, url: q.url, file: q.file, mode: q.mode, thumb: q.thumb, fx: q.fx, bgId: q.bgId, state: q.state === 'restore' || q.state === 'up' ? 'ready' : q.state,
-    refill: q.refill, label: q.st.closest('li').querySelector('.name').textContent,
-  }));
-  try { keep.length ? localStorage.setItem(QKEY, JSON.stringify(keep)) : localStorage.removeItem(QKEY); } catch {}
-}
-function loadQueue() {
-  let list = [];
-  try { list = JSON.parse(localStorage.getItem(QKEY)) || []; } catch {}
-  for (const x of list) {
-    const st = addRow(x.label || `@${x.t.user}`);
-    if (x.thumb) st.closest('li').querySelector('.thumb').src = x.thumb;
-    const q = { t: x.t, st, url: x.url, file: x.file, mode: x.mode || 'phone', thumb: x.thumb, fx: x.fx, refill: x.refill };
-    seen.add(x.t.id);
-    queue.push(q);
-    if (!x.url) q.state = 'find';
-    else if (x.state === 'bg' && x.bgId) { q.state = 'bg'; q.bgId = x.bgId; st.textContent = '받는 중 확인…'; }
-    else if (x.state === 'bad') fail(q, '실패', x.url);
-    else if (x.state === 'ready') {
-      // 다 받아 둔 영상은 보관함에서 꺼내기 (없으면 다시 받기)
-      q.state = 'restore'; st.textContent = '불러오는 중…';
-      caches.open('xdown').then(c => c.match(`ready/${mediaKey(x.url)}`))
-        .then(res => res ? res.blob() : null)
-        .then(b => { if (b) (syncInfo() ? autoDrive(q, b) : showReady(q, b)); else { q.state = 'wait'; st.textContent = '대기'; run(); } })
-        .catch(() => { q.state = 'wait'; st.textContent = '대기'; run(); });
-    }
-    else q.state = 'wait';
-  }
-  if (list.length) { $('msg').textContent = `남아 있던 영상 ${list.length}개를 다시 불러왔어요.`; summary(); }
-  // 백그라운드 받기를 못 쓰면 '받는 중'으로 남은 것도 그냥 다시 받기
-  if (!BG) queue.filter(q => q.state === 'bg').forEach(q => { q.bgId = null; q.state = 'wait'; q.st.textContent = '대기'; });
-  run();
-}
-loadQueue();
-document.addEventListener('visibilitychange', () => { if (document.hidden) saveQueue(); });
+function exec() { try { return localStorage.getItem(EKEY) || ''; } catch { return ''; } }
+function say(t, cls) { $('msg').textContent = t; $('msg').className = cls || ''; }
 
-// 입력칸을 길게 눌러 직접 붙여넣어도 바로 받기 시작
-$('input').addEventListener('paste', () => setTimeout(add, 0));
+function go(text) {
+  const m = LINK_RE.exec(text || '');
+  if (!m) { say('X·인스타 링크를 찾지 못했어요. 링크를 다시 복사해 주세요.', 'bad'); return; }
+  let link = m[0].replace(/^(https?:\/\/)(?:fixupx|fxtwitter|vxtwitter)\.com/i, '$1x.com');
+  const e = exec();
+  if (!e) { say('처음 한 번 연결이 필요해요. 「인스타 저장」 페이지 아래쪽 「📲 X 영상 받기 연결」을 휴대폰에서 눌러 주세요.', 'bad'); return; }
+  say('☁️ 맥북으로 보내는 중…');
+  location.href = e + (e.includes('?') ? '&' : '?') + 'share=' + encodeURIComponent(link);
+}
 
-// 주소 뒤에 ?url=링크 를 붙여 열면 자동 추가 (공유하기 연동용)
+$('pasteBtn').onclick = async () => {
+  try { const t = await navigator.clipboard.readText(); $('input').value = t; go(t); }
+  catch { say('붙여넣기 권한이 없어요. 아래 칸을 길게 눌러 직접 붙여 넣고 「드라이브에 저장」을 눌러 주세요.', 'bad'); }
+};
+$('sendBtn').onclick = () => go($('input').value);
+
+if (exec()) { $('listBtn').href = exec(); $('listBtn').hidden = false; }
+
+// 다른 앱 「공유」로 들어온 링크 → 바로 저장
 const p = new URLSearchParams(location.search);
-const shared = p.get('url') || p.get('text');
-if (shared) { $('input').value = shared; add(); }
+const shared = [p.get('url'), p.get('text'), p.get('title')].filter(Boolean).join(' ');
+if (shared) { $('input').value = shared; history.replaceState(null, '', location.pathname); go(shared); }
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
 </html>
