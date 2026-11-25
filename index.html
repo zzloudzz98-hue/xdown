@@ -31,7 +31,7 @@
 </head>
 <body>
 <main>
-  <h1>X 영상 받기 <span class="ver">v24 · 드라이브로 바로</span></h1>
+  <h1>X 영상 받기 <span class="ver">v25 · 드라이브로 바로</span></h1>
   <div class="card">
     <button class="primary" id="pasteBtn">📋 복사한 링크 붙여넣고 드라이브에 저장</button>
     <textarea id="input" placeholder="또는 여기에 X·인스타 링크를 붙여 넣기"></textarea>
@@ -47,11 +47,14 @@
 // v23 (2026-11-26): 휴대폰 받기 없앰 → 링크를 맥북 저장 도구(인스타 저장, 구글 앱스 스크립트)로 넘겨 맥북이 드라이브에 저장
 // 저장 도구 주소는 공개 코드에 적지 않고, 「인스타 저장」 페이지의 연결 버튼(#ig=…)을 한 번 열면 이 브라우저에 기억함
 const $ = id => document.getElementById(id);
-const EKEY = 'igsave_exec', PKEY = 'igsave_pending';
+const EKEY = 'igsave_exec', PKEY = 'igsave_pending', QKEY = 'igsave_post';
 const LINK_RE = /https?:\/\/(?:www\.|mobile\.)?(?:instagram|x|twitter|fixupx|fxtwitter|vxtwitter)\.com\/[^\s]+/i;
 
 function setup(src) {
-  const m = /[#&]ig=([^&\s]+)/.exec(src || location.hash);
+  const h = src || location.hash;
+  const pm = /[#&]p=([^&\s]+)/.exec(h);
+  if (pm) { try { const [u, k] = atob(decodeURIComponent(pm[1])).split('|'); if (/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(u) && k) localStorage.setItem(QKEY, JSON.stringify({ u, k })); } catch {} }
+  const m = /[#&]ig=([^&\s]+)/.exec(h);
   if (!m) return;
   try {
     const url = atob(decodeURIComponent(m[1]));
@@ -84,8 +87,21 @@ function go(text) {
     return;
   }
   say('☁️ 맥북으로 보내는 중…');
-  location.href = e + (e.includes('?') ? '&' : '?') + 'share=' + encodeURIComponent(link);
+  const q = post();
+  if (!q) { location.href = e + (e.includes('?') ? '&' : '?') + 'share=' + encodeURIComponent(link); return; }
+  // 화면 이동 없이 보내기 (로그인 필요 없는 받기 주소 + 열쇠)
+  fetch(q.u, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ k: q.k, text: link }) })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) throw new Error(d.msg || '실패');
+      $('input').value = '';
+      say('✅ 보냈어요. 맥북이 받아 드라이브에 저장해요. (뒤로 가기를 누르면 X로 돌아가요)', 'ok');
+      if (launchedByShare) setTimeout(() => window.close(), 1500);
+    })
+    .catch(() => { location.href = e + (e.includes('?') ? '&' : '?') + 'share=' + encodeURIComponent(link); });
 }
+function post() { try { return JSON.parse(localStorage.getItem(QKEY)); } catch { return null; } }
+let launchedByShare = false;
 
 $('pasteBtn').onclick = async () => {
   try { const t = await navigator.clipboard.readText(); $('input').value = t; go(t); }
@@ -98,7 +114,7 @@ if (exec()) { $('listBtn').href = exec(); $('listBtn').hidden = false; }
 // 다른 앱 「공유」로 들어온 링크 → 바로 저장
 const p = new URLSearchParams(location.search);
 const shared = [p.get('url'), p.get('text'), p.get('title')].filter(Boolean).join(' ');
-if (shared) { $('input').value = shared; history.replaceState(null, '', location.pathname); go(shared); }
+if (shared) { launchedByShare = true; $('input').value = shared; history.replaceState(null, '', location.pathname); go(shared); }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
