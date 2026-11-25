@@ -49,7 +49,7 @@ const $ = id => document.getElementById(id);
 const EKEY = 'igsave_exec';
 const LINK_RE = /https?:\/\/(?:www\.|mobile\.)?(?:instagram|x|twitter|fixupx|fxtwitter|vxtwitter)\.com\/[^\s]+/i;
 
-(function setup() {
+function setup() {
   const m = /[#&]ig=([^&]+)/.exec(location.hash);
   if (!m) return;
   try {
@@ -60,7 +60,9 @@ const LINK_RE = /https?:\/\/(?:www\.|mobile\.)?(?:instagram|x|twitter|fixupx|fxt
     }
   } catch {}
   history.replaceState(null, '', location.pathname + location.search);
-})();
+}
+setup();
+addEventListener('hashchange', () => { setup(); if (exec()) { $('listBtn').href = exec(); $('listBtn').hidden = false; } });
 
 function exec() { try { return localStorage.getItem(EKEY) || ''; } catch { return ''; } }
 function say(t, cls) { $('msg').textContent = t; $('msg').className = cls || ''; }
