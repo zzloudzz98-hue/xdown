@@ -13,6 +13,7 @@
     :root { --bg:#000; --card:#16181c; --text:#e7e9ea; --sub:#8b98a5; --line:#2f3336; }
   }
   * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif; }
   main { max-width:520px; margin:0 auto; padding:24px 16px 40px; }
   h1 { font-size:22px; margin:0 0 16px; display:flex; align-items:baseline; justify-content:space-between; }
@@ -30,7 +31,7 @@
 </head>
 <body>
 <main>
-  <h1>X 영상 받기 <span class="ver">v23 · 드라이브로 바로</span></h1>
+  <h1>X 영상 받기 <span class="ver">v24 · 드라이브로 바로</span></h1>
   <div class="card">
     <button class="primary" id="pasteBtn">📋 복사한 링크 붙여넣고 드라이브에 저장</button>
     <textarea id="input" placeholder="또는 여기에 X·인스타 링크를 붙여 넣기"></textarea>
@@ -46,17 +47,21 @@
 // v23 (2026-11-26): 휴대폰 받기 없앰 → 링크를 맥북 저장 도구(인스타 저장, 구글 앱스 스크립트)로 넘겨 맥북이 드라이브에 저장
 // 저장 도구 주소는 공개 코드에 적지 않고, 「인스타 저장」 페이지의 연결 버튼(#ig=…)을 한 번 열면 이 브라우저에 기억함
 const $ = id => document.getElementById(id);
-const EKEY = 'igsave_exec';
+const EKEY = 'igsave_exec', PKEY = 'igsave_pending';
 const LINK_RE = /https?:\/\/(?:www\.|mobile\.)?(?:instagram|x|twitter|fixupx|fxtwitter|vxtwitter)\.com\/[^\s]+/i;
 
-function setup() {
-  const m = /[#&]ig=([^&]+)/.exec(location.hash);
+function setup(src) {
+  const m = /[#&]ig=([^&\s]+)/.exec(src || location.hash);
   if (!m) return;
   try {
     const url = atob(decodeURIComponent(m[1]));
     if (/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(url)) {
       localStorage.setItem(EKEY, url);
       say('✅ 이 휴대폰을 맥북 저장 도구에 연결했어요. 이제 링크를 보내면 드라이브에 저장돼요.', 'ok');
+      $('listBtn').href = url; $('listBtn').hidden = false;
+      const pend = localStorage.getItem(PKEY);
+      if (pend) { localStorage.removeItem(PKEY); setTimeout(() => go(pend), 800); }
+      return true;
     }
   } catch {}
   history.replaceState(null, '', location.pathname + location.search);
@@ -68,11 +73,16 @@ function exec() { try { return localStorage.getItem(EKEY) || ''; } catch { retur
 function say(t, cls) { $('msg').textContent = t; $('msg').className = cls || ''; }
 
 function go(text) {
+  if (/[#&]ig=/.test(text || '')) { if (!setup(text)) say('연결 링크가 잘못됐어요. 텔레그램 링크를 다시 복사해 주세요.', 'bad'); return; }
   const m = LINK_RE.exec(text || '');
   if (!m) { say('X·인스타 링크를 찾지 못했어요. 링크를 다시 복사해 주세요.', 'bad'); return; }
   let link = m[0].replace(/^(https?:\/\/)(?:fixupx|fxtwitter|vxtwitter)\.com/i, '$1x.com');
   const e = exec();
-  if (!e) { say('처음 한 번 연결이 필요해요. 「인스타 저장」 페이지 아래쪽 「📲 X 영상 받기 연결」을 휴대폰에서 눌러 주세요.', 'bad'); return; }
+  if (!e) {
+    try { localStorage.setItem(PKEY, link); } catch {}
+    say('처음 한 번 연결이 필요해요. 텔레그램으로 받은 연결 링크를 길게 눌러 복사한 뒤, 위 파란 버튼을 누르세요. 연결되면 이 링크도 바로 저장돼요.', 'bad');
+    return;
+  }
   say('☁️ 맥북으로 보내는 중…');
   location.href = e + (e.includes('?') ? '&' : '?') + 'share=' + encodeURIComponent(link);
 }
