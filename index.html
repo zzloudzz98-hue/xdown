@@ -31,12 +31,13 @@
 </head>
 <body>
 <main>
-  <h1>X 영상 받기 <span class="ver">v25 · 드라이브로 바로</span></h1>
+  <h1>X 영상 받기 <span class="ver">v26 · 드라이브로 바로</span></h1>
   <div class="card">
     <button class="primary" id="pasteBtn">📋 복사한 링크 붙여넣고 드라이브에 저장</button>
     <textarea id="input" placeholder="또는 여기에 X·인스타 링크를 붙여 넣기"></textarea>
     <button class="ghost" id="sendBtn">☁️ 드라이브에 저장</button>
     <div id="msg"></div>
+    <div class="hint" id="mode"></div>
     <div class="hint">링크를 보내면 <b>맥북이 받아서 구글 드라이브에 저장</b>해요. 휴대폰에는 받지 않아요.<br>
       X → 「X영상」 폴더, 인스타 → 「개인/인스타저장」 폴더<br>
       X·인스타 앱에서 「공유」 → 「X 영상 받기」를 눌러도 바로 저장돼요.</div>
@@ -64,6 +65,7 @@ function setup(src) {
       $('listBtn').href = url; $('listBtn').hidden = false;
       const pend = localStorage.getItem(PKEY);
       if (pend) { localStorage.removeItem(PKEY); setTimeout(() => go(pend), 800); }
+      try { showMode(); } catch {}
       return true;
     }
   } catch {}
@@ -100,8 +102,10 @@ function go(text) {
     })
     .catch(() => { location.href = e + (e.includes('?') ? '&' : '?') + 'share=' + encodeURIComponent(link); });
 }
+function showMode() { $('mode').textContent = post() ? '🟢 화면 이동 없이 보내기: 켜짐' : '⚪ 화면 이동 없이 보내기: 꺼짐 (연결 링크를 다시 붙여 넣으면 켜져요)'; }
 function post() { try { return JSON.parse(localStorage.getItem(QKEY)); } catch { return null; } }
 let launchedByShare = false;
+showMode();
 
 $('pasteBtn').onclick = async () => {
   try { const t = await navigator.clipboard.readText(); $('input').value = t; go(t); }
