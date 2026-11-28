@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>인스타 저장 — 보내는 중</title>
+<link rel="manifest" href="manifest.json">
+<style>
+body{font-family:system-ui,sans-serif;margin:0;padding:28px 20px;color:#222;background:#fff}
+h1{font-size:20px;margin:0 0 12px}
+p{font-size:15px;line-height:1.6;margin:8px 0}
+.err{color:#c62828}
+a.btn{display:block;margin:14px 0;padding:14px;border-radius:12px;background:#d6249f;color:#fff;text-align:center;text-decoration:none;font-size:16px}
+code{word-break:break-all;font-size:13px;color:#555}
+</style></head><body>
+<h1 id="h">보내는 중…</h1>
+<p id="m"></p>
+<script>
+var EXEC_ID = 'AKfycbyjI11WQWYB69R2ur_RP_hH5l_KEyHO-m4dxp_RmqTTxS2Lqm1OM0HQ_FEG2Ci3ZEA';
+function execUrl(){
+  var a = localStorage.getItem('igshare_acct'); // '' = 기본, '0','1','2' = 계정 번호
+  return a ? 'https://script.google.com/macros/u/' + a + '/s/' + EXEC_ID + '/exec'
+           : 'https://script.google.com/macros/s/' + EXEC_ID + '/exec';
+}
+var q = new URLSearchParams(location.search);
+var all = [q.get('url'), q.get('text'), q.get('title')].filter(Boolean).join(' ');
+// 안드로이드는 링크를 「글」 칸에 실어 보내는 경우가 많아 글 전체에서 링크를 골라낸다
+var m = all.match(/https?:\/\/[^\s"'<>]+/g) || [];
+var link = '';
+for (var i = 0; i < m.length; i++) {
+  if (/(instagram\.com|instagr\.am|x\.com|twitter\.com|youtube\.com|youtu\.be)/i.test(m[i])) { link = m[i]; break; }
+}
+var H = document.getElementById('h'), M = document.getElementById('m');
+if (!link) {
+  H.textContent = '링크를 찾지 못했어요';
+  H.className = 'err';
+  M.innerHTML = '인스타·X·유튜브 링크만 저장할 수 있어요.<br>받은 글: <code></code>';
+  M.querySelector('code').textContent = all || '(비어 있음)';
+} else {
+  // 같은 링크를 1분 안에 또 공유하면(두 번 누름) 다시 보내지 않는다 — 맥북 쪽에서도 한 번 더 걸러냄
+  var key = link.replace(/[?#].*$/, '');
+  var last = JSON.parse(localStorage.getItem('igshare_last') || '{}');
+  if (last.k === key && Date.now() - last.t < 60000) {
+    H.textContent = '방금 보낸 링크예요';
+    M.textContent = '두 번 보내지 않았어요. 이 창은 닫으셔도 됩니다.';
+  } else {
+    localStorage.setItem('igshare_last', JSON.stringify({k: key, t: Date.now()}));
+    location.replace(execUrl() + '?u=' + encodeURIComponent(link));
+  }
+}
+</script>
+</body></html>
