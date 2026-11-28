@@ -1,6 +1,6 @@
 {
-  "name": "X 영상 받기",
-  "short_name": "X 영상 받기",
+  "name": "인스타·X 저장",
+  "short_name": "인스타·X 저장",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
