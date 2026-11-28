@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#d6249f">
+<title>인스타 저장</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<style>
+body{font-family:system-ui,sans-serif;margin:0;padding:24px 18px 40px;color:#222;background:#fff;max-width:520px}
+h1{font-size:22px;margin:0 0 4px}
+.v{color:#888;font-size:12px;margin-bottom:16px}
+h2{font-size:16px;margin:22px 0 8px}
+p,li{font-size:15px;line-height:1.6}
+ol{padding-left:20px;margin:6px 0}
+.box{border:1px solid #eee;border-radius:12px;padding:12px 14px;margin:10px 0}
+button{width:100%;margin:6px 0;padding:13px;border-radius:12px;border:1px solid #d6249f;background:#fff;color:#d6249f;font-size:15px}
+button.on{background:#d6249f;color:#fff}
+#cur{font-weight:bold}
+</style></head><body>
+<h1>📥 인스타 저장</h1>
+<div class="v">공유로 바로 저장 · v1 · 11/28</div>
+
+<div class="box">
+<b>쓰는 법</b>
+<ol>
+<li>인스타·X·유튜브에서 <b>공유</b>(종이비행기) → 아래 줄 <b>「공유」</b></li>
+<li>휴대폰 공유창에서 <b>「인스타 저장」</b> 누르기</li>
+<li>끝 — 맥북이 구글 드라이브에 저장합니다 (유튜브만 화질 고르는 칸이 한 번 뜸)</li>
+</ol>
+</div>
+
+<h2>구글 계정 고르기 (처음 한 번)</h2>
+<p>휴대폰 크롬에 구글 계정이 여러 개면 저장 페이지가 「unable to open the file(열 수 없음)」을 낼 수 있어요. 아래 버튼을 위에서부터 눌러 보고, <b>저장 페이지가 제대로 열린 번호</b>에서 「이걸로 정함」을 누르세요.</p>
+<p>지금 정한 것: <span id="cur"></span></p>
+<div id="btns"></div>
+
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', {scope: './'});
+var EXEC_ID = 'AKfycbyjI11WQWYB69R2ur_RP_hH5l_KEyHO-m4dxp_RmqTTxS2Lqm1OM0HQ_FEG2Ci3ZEA';
+var opts = [['', '기본'], ['0', '계정 0번'], ['1', '계정 1번'], ['2', '계정 2번']];
+function url(a){ return a ? 'https://script.google.com/macros/u/' + a + '/s/' + EXEC_ID + '/exec?ping=1'
+                          : 'https://script.google.com/macros/s/' + EXEC_ID + '/exec?ping=1'; }
+function draw(){
+  var cur = localStorage.getItem('igshare_acct') || '';
+  document.getElementById('cur').textContent = opts.filter(function(o){return o[0]===cur;})[0][1];
+  var b = document.getElementById('btns'); b.innerHTML = '';
+  opts.forEach(function(o){
+    var t = document.createElement('button');
+    t.textContent = '「' + o[1] + '」으로 열어 보기';
+    t.onclick = function(){ window.open(url(o[0]), '_blank'); };
+    var s = document.createElement('button');
+    s.textContent = '「' + o[1] + '」 이걸로 정함';
+    if (o[0] === cur) s.className = 'on';
+    s.onclick = function(){ localStorage.setItem('igshare_acct', o[0]); draw(); };
+    b.appendChild(t); b.appendChild(s);
+  });
+}
+draw();
+</script>
+</body></html>
